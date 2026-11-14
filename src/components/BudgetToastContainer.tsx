@@ -20,34 +20,34 @@ const SEVERITY_STYLES: Record<
   }
 > = {
   info: {
-    surface: 'bg-white border-teal-200',
-    title: 'text-teal-900',
-    bar: 'bg-teal-600',
-    icon: 'text-teal-700',
+    surface: 'bg-white dark:bg-slate-900 border-teal-200 dark:border-teal-800',
+    title: 'text-teal-900 dark:text-teal-200',
+    bar: 'bg-teal-600 dark:bg-teal-500',
+    icon: 'text-teal-700 dark:text-teal-400',
   },
   warning: {
-    surface: 'bg-amber-50 border-amber-200',
-    title: 'text-amber-950',
+    surface: 'bg-amber-50 dark:bg-slate-900 border-amber-200 dark:border-amber-800',
+    title: 'text-amber-950 dark:text-amber-200',
     bar: 'bg-amber-500',
-    icon: 'text-amber-700',
+    icon: 'text-amber-700 dark:text-amber-400',
   },
   high: {
-    surface: 'bg-orange-50 border-orange-200',
-    title: 'text-orange-950',
+    surface: 'bg-orange-50 dark:bg-slate-900 border-orange-200 dark:border-orange-800',
+    title: 'text-orange-950 dark:text-orange-200',
     bar: 'bg-orange-500',
-    icon: 'text-orange-700',
+    icon: 'text-orange-700 dark:text-orange-400',
   },
   critical: {
-    surface: 'bg-rose-50 border-rose-200',
-    title: 'text-rose-950',
-    bar: 'bg-rose-600',
-    icon: 'text-rose-700',
+    surface: 'bg-rose-50 dark:bg-slate-900 border-rose-200 dark:border-rose-800',
+    title: 'text-rose-950 dark:text-rose-200',
+    bar: 'bg-rose-600 dark:bg-rose-500',
+    icon: 'text-rose-700 dark:text-rose-400',
   },
   exceeded: {
-    surface: 'bg-red-50 border-red-300',
-    title: 'text-red-950',
-    bar: 'bg-red-600',
-    icon: 'text-red-700',
+    surface: 'bg-red-50 dark:bg-slate-900 border-red-300 dark:border-red-800',
+    title: 'text-red-950 dark:text-red-200',
+    bar: 'bg-red-600 dark:bg-red-500',
+    icon: 'text-red-700 dark:text-red-400',
   },
 };
 
@@ -98,32 +98,32 @@ function SingleBudgetToast({
             <h3 className={`font-display text-xs font-bold leading-snug ${styles.title}`}>
               {toast.title}
             </h3>
-            <p className="text-xs text-slate-700 leading-relaxed">{toast.message}</p>
+            <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">{toast.message}</p>
           </div>
         </div>
         <button
           type="button"
           onClick={() => onDismiss(toast.id)}
           aria-label="Dismiss budget notification"
-          className="p-1 rounded-md text-slate-500 hover:text-slate-900 hover:bg-black/5 cursor-pointer shrink-0"
+          className="p-1 rounded-md text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-black/5 dark:hover:bg-white/10 cursor-pointer shrink-0"
         >
           <X className="w-3.5 h-3.5" />
         </button>
       </div>
 
       <div className="space-y-1.5">
-        <div className="w-full h-1.5 bg-slate-200/80 rounded-full overflow-hidden">
+        <div className="w-full h-1.5 bg-slate-200/80 dark:bg-slate-800 rounded-full overflow-hidden">
           <div
             className={`h-full rounded-full transition-all duration-300 ${styles.bar}`}
             style={{ width: `${fillPct}%` }}
           />
         </div>
-        <div className="flex items-center justify-between gap-2 text-[11px] font-mono-tabular text-slate-600">
+        <div className="flex items-center justify-between gap-2 text-[11px] font-mono-tabular text-slate-600 dark:text-slate-400">
           <span>
             {formatINR(toast.newSpend)} / {formatINR(toast.budget)}
           </span>
           <div className="flex items-center gap-2.5">
-            <span className="font-semibold text-slate-800">{toast.percentUsed}%</span>
+            <span className="font-semibold text-slate-800 dark:text-slate-200">{toast.percentUsed}%</span>
             {onInspectBudget && (
               <button
                 type="button"
@@ -131,7 +131,7 @@ function SingleBudgetToast({
                   onInspectBudget();
                   onDismiss(toast.id);
                 }}
-                className="font-sans font-semibold text-teal-800 hover:underline cursor-pointer"
+                className="font-sans font-semibold text-teal-800 dark:text-teal-400 hover:underline cursor-pointer"
               >
                 View
               </button>

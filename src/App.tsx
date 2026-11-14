@@ -2,14 +2,19 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { onAuthStateChanged, signInWithPopup, signOut, type User } from 'firebase/auth';
 import {
   Check,
+  ChevronUp,
   Download,
+  FileDown,
   FolderPlus,
+  Loader2,
   LogOut,
   Menu,
   MessageSquareText,
+  Moon,
   Pencil,
   Plus,
   Search,
+  Sun,
   Tag as TagIcon,
   Trash2,
   UserPlus,
@@ -66,6 +71,7 @@ import {
   type BudgetToastItem,
 } from './utils/budgetUtils';
 import { evaluateRecurringBills } from './utils/recurringUtils';
+import { downloadMonthlyExpensePdf } from './utils/pdfReportUtils';
 import { computeEqualSplitShares, computeProjectBalances } from './utils/splitUtils';
 import { AiExpenseDrawer } from './components/AiExpenseDrawer';
 import { AnalyticsCharts } from './components/AnalyticsCharts';
@@ -75,8 +81,10 @@ import { ExpenseTable } from './components/ExpenseTable';
 import { ExpenseModal, InviteModal, ProjectModal, TagModal } from './components/Modals';
 import { MonthlyBudgetCard } from './components/MonthlyBudgetCard';
 import { RecurringAlertsBanner } from './components/RecurringAlertsBanner';
+import { SpendingInsightsCard } from './components/SpendingInsightsCard';
 import { SplitsBalancesView } from './components/SplitsBalancesView';
 import { UserAvatar } from './components/UserAvatar';
+import { useTheme } from './hooks/useTheme';
 
 type ActiveView = 'overview' | 'ledger' | 'splits' | 'manage';
 
@@ -125,11 +133,36 @@ export default function App() {
   const [confirmDeleteProject, setConfirmDeleteProject] = useState<Project | null>(null);
   const [globalError, setGlobalError] = useState<string | null>(null);
   const [budgetToasts, setBudgetToasts] = useState<BudgetToastItem[]>([]);
+  const [exportingPdf, setExportingPdf] = useState(false);
 
   const [scheduleTickDate, setScheduleTickDate] = useState<string>(() => getTodayISO());
   const [lastScheduleCheck, setLastScheduleCheck] = useState<Date>(() => new Date());
 
+  const { theme, isDark, setTheme } = useTheme();
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
+
   const bootstrappedUserRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!userMenuOpen) return;
+    const handlePointerDown = (event: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setUserMenuOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setUserMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [userMenuOpen]);
 
   // Auth listener
   useEffect(() => {
@@ -419,6 +452,7 @@ export default function App() {
   };
 
   const handleSignOut = async () => {
+    setUserMenuOpen(false);
     await signOut(auth);
   };
 
@@ -602,10 +636,30 @@ export default function App() {
     URL.revokeObjectURL(url);
   };
 
+  const handleDownloadMonthlyPdf = () => {
+    if (!activeProject || !user || exportingPdf) return;
+    setExportingPdf(true);
+    setGlobalError(null);
+    try {
+      downloadMonthlyExpensePdf({
+        project: activeProject,
+        expenses,
+        tags,
+        userName: user.displayName || user.email || 'Member',
+      });
+    } catch (err) {
+      setGlobalError(
+        err instanceof Error ? err.message : 'Unable to generate monthly PDF summary.'
+      );
+    } finally {
+      setExportingPdf(false);
+    }
+  };
+
   if (!authReady) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="text-sm text-slate-500">Loading workspace...</div>
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex items-center justify-center">
+        <div className="text-sm text-slate-500 dark:text-slate-400">Loading workspace...</div>
       </div>
     );
   }
@@ -624,30 +678,30 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 flex">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex">
       {/* Mobile Sidebar Backdrop */}
       {mobileSidebarOpen && (
         <div
           onClick={() => setMobileSidebarOpen(false)}
-          className="fixed inset-0 z-30 bg-slate-900/30 lg:hidden"
+          className="fixed inset-0 z-30 bg-slate-900/30 dark:bg-slate-950/60 lg:hidden"
         />
       )}
 
       {/* Left Sidebar (260px) */}
       <aside
-        className={`fixed lg:sticky top-0 left-0 z-40 h-screen w-[260px] shrink-0 bg-white border-r border-slate-200 flex flex-col transition-transform duration-200 ${
+        className={`fixed lg:sticky top-0 left-0 z-40 h-screen w-[260px] shrink-0 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col transition-transform duration-200 ${
           mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         }`}
       >
-        <div className="h-16 px-5 border-b border-slate-200 flex items-center justify-between">
-          <span className="font-display text-lg font-bold tracking-tight text-slate-900 whitespace-nowrap shrink-0">
+        <div className="h-16 px-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+          <span className="font-display text-lg font-bold tracking-tight text-slate-900 dark:text-slate-100 whitespace-nowrap shrink-0">
             KhataLedger
           </span>
           <button
             type="button"
             onClick={() => setMobileSidebarOpen(false)}
             aria-label="Close sidebar"
-            className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 lg:hidden cursor-pointer"
+            className="p-1.5 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 lg:hidden cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
@@ -657,7 +711,9 @@ export default function App() {
           {/* Projects Switcher */}
           <div className="space-y-2">
             <div className="px-2 flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-500">Projects</span>
+              <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                Projects
+              </span>
               <button
                 type="button"
                 onClick={() => {
@@ -665,7 +721,7 @@ export default function App() {
                   setProjectModalOpen(true);
                 }}
                 aria-label="Create new project"
-                className="p-1 rounded text-slate-500 hover:text-teal-700 hover:bg-slate-100 cursor-pointer"
+                className="p-1 rounded text-slate-500 dark:text-slate-400 hover:text-teal-700 dark:hover:text-teal-400 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
               >
                 <FolderPlus className="w-4 h-4" />
               </button>
@@ -679,8 +735,8 @@ export default function App() {
                     key={proj.id}
                     className={`group flex items-center justify-between rounded-lg px-2.5 py-2 text-sm transition-colors ${
                       isActive
-                        ? 'bg-teal-50 text-teal-900 font-semibold'
-                        : 'text-slate-700 hover:bg-slate-100'
+                        ? 'bg-teal-50 dark:bg-teal-950/60 text-teal-900 dark:text-teal-200 font-semibold'
+                        : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
                     }`}
                   >
                     <button
@@ -703,7 +759,7 @@ export default function App() {
                             setProjectModalOpen(true);
                           }}
                           aria-label={`Edit ${proj.name}`}
-                          className="p-1 rounded text-slate-500 hover:text-slate-900 cursor-pointer"
+                          className="p-1 rounded text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 cursor-pointer"
                         >
                           <Pencil className="w-3 h-3" />
                         </button>
@@ -712,7 +768,7 @@ export default function App() {
                             type="button"
                             onClick={() => setConfirmDeleteProject(proj)}
                             aria-label={`Delete ${proj.name}`}
-                            className="p-1 rounded text-slate-500 hover:text-red-700 cursor-pointer"
+                            className="p-1 rounded text-slate-500 dark:text-slate-400 hover:text-red-700 dark:hover:text-red-400 cursor-pointer"
                           >
                             <Trash2 className="w-3 h-3" />
                           </button>
@@ -729,7 +785,7 @@ export default function App() {
                   setEditingProject(null);
                   setProjectModalOpen(true);
                 }}
-                className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer"
+                className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>New Project</span>
@@ -739,15 +795,15 @@ export default function App() {
 
           {/* Collaborators in Active Project */}
           {activeProject && (
-            <div className="space-y-2.5 pt-4 border-t border-slate-200">
+            <div className="space-y-2.5 pt-4 border-t border-slate-200 dark:border-slate-800">
               <div className="px-2 flex items-center justify-between">
-                <span className="text-xs font-semibold text-slate-500">
+                <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
                   Members ({members.length})
                 </span>
                 <button
                   type="button"
                   onClick={() => setInviteModalOpen(true)}
-                  className="text-xs font-medium text-teal-700 hover:text-teal-800 inline-flex items-center gap-1 cursor-pointer"
+                  className="text-xs font-medium text-teal-700 dark:text-teal-400 hover:text-teal-800 dark:hover:text-teal-300 inline-flex items-center gap-1 cursor-pointer"
                 >
                   <UserPlus className="w-3.5 h-3.5" />
                   <span>Invite</span>
@@ -757,10 +813,12 @@ export default function App() {
                 {members.map((m) => (
                   <div key={m.uid} className="flex items-center gap-2.5 py-1">
                     <UserAvatar name={m.displayName} photoURL={m.photoURL} size="xs" />
-                    <span className="text-xs font-medium text-slate-700 truncate flex-1">
+                    <span className="text-xs font-medium text-slate-700 dark:text-slate-300 truncate flex-1">
                       {m.displayName}
                     </span>
-                    <span className="text-[11px] text-slate-400 capitalize">{m.role}</span>
+                    <span className="text-[11px] text-slate-400 dark:text-slate-500 capitalize">
+                      {m.role}
+                    </span>
                   </div>
                 ))}
               </div>
@@ -769,19 +827,23 @@ export default function App() {
 
           {/* Pending Incoming Invites */}
           {pendingInvites.length > 0 && (
-            <div className="space-y-2 pt-4 border-t border-slate-200">
-              <span className="px-2 text-xs font-semibold text-teal-800 block">
+            <div className="space-y-2 pt-4 border-t border-slate-200 dark:border-slate-800">
+              <span className="px-2 text-xs font-semibold text-teal-800 dark:text-teal-300 block">
                 Pending Invites ({pendingInvites.length})
               </span>
               <div className="space-y-2">
                 {pendingInvites.map((inv) => (
                   <div
                     key={inv.id}
-                    className="p-3 rounded-lg bg-teal-50/70 border border-teal-200 space-y-2"
+                    className="p-3 rounded-lg bg-teal-50/70 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800 space-y-2"
                   >
                     <div className="text-xs">
-                      <p className="font-semibold text-slate-900 truncate">{inv.projectName}</p>
-                      <p className="text-slate-600 truncate">From {inv.invitedByName}</p>
+                      <p className="font-semibold text-slate-900 dark:text-slate-100 truncate">
+                        {inv.projectName}
+                      </p>
+                      <p className="text-slate-600 dark:text-slate-400 truncate">
+                        From {inv.invitedByName}
+                      </p>
                     </div>
                     <div className="flex items-center gap-2">
                       <button
@@ -798,7 +860,7 @@ export default function App() {
                       <button
                         type="button"
                         onClick={() => void declineInvite(inv)}
-                        className="py-1.5 px-2 rounded-md border border-slate-200 bg-white text-slate-700 text-xs font-medium hover:bg-slate-50 cursor-pointer"
+                        className="py-1.5 px-2 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-medium hover:bg-slate-50 dark:hover:bg-slate-700 cursor-pointer"
                       >
                         Decline
                       </button>
@@ -810,28 +872,108 @@ export default function App() {
           )}
         </div>
 
-        {/* User Footer */}
-        <div className="p-4 border-t border-slate-200 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <UserAvatar
-              name={user.displayName || user.email || 'User'}
-              photoURL={user.photoURL ?? ''}
-              size="sm"
-            />
-            <div className="min-w-0">
-              <p className="text-xs font-semibold text-slate-900 truncate">
-                {user.displayName || 'Account'}
-              </p>
-              <p className="text-[11px] text-slate-500 truncate">{user.email}</p>
+        {/* User Settings Footer & Dropdown */}
+        <div ref={userMenuRef} className="relative p-3 border-t border-slate-200 dark:border-slate-800">
+          {userMenuOpen && (
+            <div
+              role="menu"
+              aria-label="User settings"
+              className="absolute bottom-full left-3 right-3 mb-2 z-50 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-lg p-2 space-y-2"
+            >
+              <div className="px-2.5 py-1.5 border-b border-slate-100 dark:border-slate-800">
+                <p className="text-xs font-semibold text-slate-900 dark:text-slate-100 truncate">
+                  {user.displayName || 'Account'}
+                </p>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                  {user.email}
+                </p>
+              </div>
+
+              <div className="px-2.5 py-1 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                    Appearance
+                  </span>
+                  <span className="text-[11px] font-medium text-slate-700 dark:text-slate-300 capitalize">
+                    {theme}
+                  </span>
+                </div>
+                <div
+                  role="group"
+                  aria-label="Theme selection"
+                  className="grid grid-cols-2 gap-1 p-1 rounded-lg bg-slate-100 dark:bg-slate-800"
+                >
+                  <button
+                    type="button"
+                    onClick={() => setTheme('light')}
+                    aria-pressed={theme === 'light'}
+                    className={`flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+                      theme === 'light'
+                        ? 'bg-white text-slate-900 shadow-xs'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
+                    }`}
+                  >
+                    <Sun className="w-3.5 h-3.5" />
+                    <span>Light</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTheme('dark')}
+                    aria-pressed={theme === 'dark'}
+                    className={`flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+                      theme === 'dark'
+                        ? 'bg-slate-900 text-slate-100 shadow-xs'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
+                    }`}
+                  >
+                    <Moon className="w-3.5 h-3.5" />
+                    <span>Dark</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="pt-1 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => void handleSignOut()}
+                  className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors cursor-pointer"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span>Sign out</span>
+                </button>
+              </div>
             </div>
-          </div>
+          )}
+
           <button
             type="button"
-            onClick={() => void handleSignOut()}
-            aria-label="Sign out"
-            className="p-2 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 cursor-pointer shrink-0"
+            onClick={() => setUserMenuOpen((prev) => !prev)}
+            aria-haspopup="menu"
+            aria-expanded={userMenuOpen}
+            aria-label="Open user settings menu"
+            className="w-full flex items-center justify-between gap-2 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
           >
-            <LogOut className="w-4 h-4" />
+            <div className="flex items-center gap-2.5 min-w-0 text-left">
+              <UserAvatar
+                name={user.displayName || user.email || 'User'}
+                photoURL={user.photoURL ?? ''}
+                size="sm"
+              />
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-slate-900 dark:text-slate-100 truncate">
+                  {user.displayName || 'Account'}
+                </p>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                  {user.email}
+                </p>
+              </div>
+            </div>
+            <ChevronUp
+              className={`w-4 h-4 text-slate-400 dark:text-slate-500 shrink-0 transition-transform ${
+                userMenuOpen ? 'rotate-180' : ''
+              }`}
+            />
           </button>
         </div>
       </aside>
@@ -839,19 +981,19 @@ export default function App() {
       {/* Main Content Area */}
       <div className="flex-1 min-w-0 flex flex-col">
         {/* Top Bar Contract (3 clean zones) */}
-        <header className="sticky top-0 z-20 h-16 px-4 sm:px-6 lg:px-8 bg-white border-b border-slate-200 flex items-center justify-between gap-8">
+        <header className="sticky top-0 z-20 h-16 px-4 sm:px-6 lg:px-8 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-8">
           {/* Zone 1: Menu toggle (mobile) + Active Project Breadcrumb */}
           <div className="flex items-center gap-3 min-w-0">
             <button
               type="button"
               onClick={() => setMobileSidebarOpen(true)}
               aria-label="Open projects menu"
-              className="p-2 rounded-lg text-slate-600 hover:bg-slate-100 lg:hidden cursor-pointer"
+              className="p-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 lg:hidden cursor-pointer"
             >
               <Menu className="w-5 h-5" />
             </button>
             <div className="min-w-0">
-              <h1 className="font-display text-base font-bold text-slate-900 truncate">
+              <h1 className="font-display text-base font-bold text-slate-900 dark:text-slate-100 truncate">
                 {activeProject?.name ?? 'Select a Project'}
               </h1>
             </div>
@@ -864,8 +1006,8 @@ export default function App() {
               onClick={() => setActiveView('overview')}
               className={`text-sm font-medium whitespace-nowrap shrink-0 py-1 border-b-2 transition-colors cursor-pointer ${
                 activeView === 'overview'
-                  ? 'border-teal-700 text-slate-900'
-                  : 'border-transparent text-slate-600 hover:text-slate-900'
+                  ? 'border-teal-700 dark:border-teal-400 text-slate-900 dark:text-slate-100'
+                  : 'border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
               }`}
             >
               Overview
@@ -875,8 +1017,8 @@ export default function App() {
               onClick={() => setActiveView('ledger')}
               className={`text-sm font-medium whitespace-nowrap shrink-0 py-1 border-b-2 transition-colors cursor-pointer ${
                 activeView === 'ledger'
-                  ? 'border-teal-700 text-slate-900'
-                  : 'border-transparent text-slate-600 hover:text-slate-900'
+                  ? 'border-teal-700 dark:border-teal-400 text-slate-900 dark:text-slate-100'
+                  : 'border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
               }`}
             >
               Ledger
@@ -886,8 +1028,8 @@ export default function App() {
               onClick={() => setActiveView('splits')}
               className={`text-sm font-medium whitespace-nowrap shrink-0 py-1 border-b-2 transition-colors cursor-pointer ${
                 activeView === 'splits'
-                  ? 'border-teal-700 text-slate-900'
-                  : 'border-transparent text-slate-600 hover:text-slate-900'
+                  ? 'border-teal-700 dark:border-teal-400 text-slate-900 dark:text-slate-100'
+                  : 'border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
               }`}
             >
               Balances
@@ -897,8 +1039,8 @@ export default function App() {
               onClick={() => setActiveView('manage')}
               className={`text-sm font-medium whitespace-nowrap shrink-0 py-1 border-b-2 transition-colors cursor-pointer ${
                 activeView === 'manage'
-                  ? 'border-teal-700 text-slate-900'
-                  : 'border-transparent text-slate-600 hover:text-slate-900'
+                  ? 'border-teal-700 dark:border-teal-400 text-slate-900 dark:text-slate-100'
+                  : 'border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
               }`}
             >
               Tags &amp; Members
@@ -914,7 +1056,7 @@ export default function App() {
                 setEditingExpense(null);
                 setExpenseModalOpen(true);
               }}
-              className="px-4 py-2 text-xs sm:text-sm font-semibold rounded-lg bg-teal-700 hover:bg-teal-800 text-white inline-flex items-center gap-1.5 transition-colors disabled:opacity-50 whitespace-nowrap shrink-0 cursor-pointer"
+              className="px-4 py-2 text-xs sm:text-sm font-semibold rounded-lg bg-teal-700 hover:bg-teal-800 dark:bg-teal-600 dark:hover:bg-teal-500 text-white inline-flex items-center gap-1.5 transition-colors disabled:opacity-50 whitespace-nowrap shrink-0 cursor-pointer"
             >
               <Plus className="w-4 h-4" />
               <span>Add Expense</span>
@@ -923,7 +1065,7 @@ export default function App() {
         </header>
 
         {/* Mobile View Switcher */}
-        <div className="md:hidden px-4 py-2 bg-white border-b border-slate-200 flex items-center gap-2 overflow-x-auto">
+        <div className="md:hidden px-4 py-2 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center gap-2 overflow-x-auto">
           {(
             [
               { id: 'overview', label: 'Overview' },
@@ -938,8 +1080,8 @@ export default function App() {
               onClick={() => setActiveView(tab.id)}
               className={`px-3 py-1.5 rounded-md text-xs font-medium whitespace-nowrap shrink-0 cursor-pointer ${
                 activeView === tab.id
-                  ? 'bg-slate-900 text-white'
-                  : 'text-slate-600 hover:bg-slate-100'
+                  ? 'bg-slate-900 dark:bg-teal-600 text-white'
+                  : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
               }`}
             >
               {tab.label}
@@ -952,7 +1094,7 @@ export default function App() {
           {globalError && (
             <div
               role="alert"
-              className="p-3.5 rounded-lg bg-red-50 border border-red-200 text-xs text-red-700 flex items-center justify-between gap-4"
+              className="p-3.5 rounded-lg bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/60 text-xs text-red-700 dark:text-red-300 flex items-center justify-between gap-4"
             >
               <span>{globalError}</span>
               <button
@@ -966,11 +1108,11 @@ export default function App() {
           )}
 
           {!activeProject ? (
-            <div className="bg-white border border-slate-200 rounded-xl p-10 text-center space-y-4">
-              <h2 className="font-display text-lg font-bold text-slate-900">
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-10 text-center space-y-4">
+              <h2 className="font-display text-lg font-bold text-slate-900 dark:text-slate-100">
                 Create or accept a project to get started
               </h2>
-              <p className="text-sm text-slate-600 max-w-md mx-auto">
+              <p className="text-sm text-slate-600 dark:text-slate-400 max-w-md mx-auto">
                 Each project keeps its own members, tags, and expenses isolated.
               </p>
               <button
@@ -988,14 +1130,14 @@ export default function App() {
             <>
               {/* Workspace Action Strip */}
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <p className="text-sm text-slate-600">
+                <p className="text-sm text-slate-600 dark:text-slate-400">
                   {activeProject.description || 'Shared project expense workspace'}
                 </p>
                 <div className="flex items-center gap-2.5 flex-wrap">
                   <button
                     type="button"
                     onClick={() => setInviteModalOpen(true)}
-                    className="px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
+                    className="px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
                   >
                     <UserPlus className="w-3.5 h-3.5" />
                     <span>Invite Member</span>
@@ -1003,7 +1145,7 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => setTagModalOpen(true)}
-                    className="px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
+                    className="px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
                   >
                     <TagIcon className="w-3.5 h-3.5" />
                     <span>New Tag</span>
@@ -1011,7 +1153,7 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => setAiDrawerOpen(true)}
-                    className="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-slate-900 text-white hover:bg-slate-800 inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
+                    className="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-slate-900 dark:bg-slate-800 text-white hover:bg-slate-800 dark:hover:bg-slate-700 border border-transparent dark:border-slate-700 inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
                   >
                     <MessageSquareText className="w-3.5 h-3.5" />
                     <span>AI Expense Chat</span>
@@ -1058,47 +1200,70 @@ export default function App() {
                 aria-label="Project Summary Metrics"
                 className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"
               >
-                <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-1">
-                  <span className="text-xs font-medium text-slate-500 block">
+                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 space-y-1">
+                  <span className="text-xs font-medium text-slate-500 dark:text-slate-400 block">
                     Total Spend {hasActiveFilters ? '(Filtered)' : ''}
                   </span>
-                  <div className="font-mono-tabular text-2xl font-bold text-slate-900">
+                  <div className="font-mono-tabular text-2xl font-bold text-slate-900 dark:text-slate-100">
                     {formatINR(metrics.totalSpend)}
                   </div>
-                  <span className="text-xs text-slate-500 font-mono-tabular block">
+                  <span className="text-xs text-slate-500 dark:text-slate-400 font-mono-tabular block">
                     {filteredExpenses.length}{' '}
                     {filteredExpenses.length === 1 ? 'transaction' : 'transactions'}
                   </span>
                 </div>
 
-                <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-1">
-                  <span className="text-xs font-medium text-slate-500 block">This Month</span>
-                  <div className="font-mono-tabular text-2xl font-bold text-slate-900">
+                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 space-y-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                      This Month
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleDownloadMonthlyPdf}
+                      disabled={exportingPdf}
+                      title="Download current month's PDF summary report"
+                      aria-label="Download monthly PDF summary report"
+                      className="px-2 py-0.5 text-[11px] font-semibold rounded-md border border-teal-200 dark:border-teal-800 bg-teal-50 dark:bg-teal-950/60 text-teal-800 dark:text-teal-300 hover:bg-teal-100 dark:hover:bg-teal-900/60 inline-flex items-center gap-1 whitespace-nowrap shrink-0 cursor-pointer disabled:opacity-60 transition-colors"
+                    >
+                      {exportingPdf ? (
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                      ) : (
+                        <FileDown className="w-3 h-3" />
+                      )}
+                      <span>{exportingPdf ? 'Generating...' : 'PDF Report'}</span>
+                    </button>
+                  </div>
+                  <div className="font-mono-tabular text-2xl font-bold text-slate-900 dark:text-slate-100">
                     {formatINR(metrics.thisMonthSpend)}
                   </div>
-                  <span className="text-xs text-slate-500 font-mono-tabular block">
+                  <span className="text-xs text-slate-500 dark:text-slate-400 font-mono-tabular block">
                     {activeProject.monthlyBudget
                       ? `of ${formatINR(activeProject.monthlyBudget)} cap`
                       : new Date().toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}
                   </span>
                 </div>
 
-                <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-1">
-                  <span className="text-xs font-medium text-slate-500 block">Top Category</span>
-                  <div className="font-display text-xl font-bold text-slate-900 truncate">
+                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 space-y-1">
+                  <span className="text-xs font-medium text-slate-500 dark:text-slate-400 block">
+                    Top Category
+                  </span>
+                  <div className="font-display text-xl font-bold text-slate-900 dark:text-slate-100 truncate">
                     {metrics.topTagName}
                   </div>
-                  <span className="text-xs text-slate-500 font-mono-tabular block">
+                  <span className="text-xs text-slate-500 dark:text-slate-400 font-mono-tabular block">
                     {formatINR(metrics.topTagAmount)}
                   </span>
                 </div>
 
-                <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-1">
-                  <span className="text-xs font-medium text-slate-500 block">Top Method</span>
-                  <div className="font-display text-xl font-bold text-slate-900 truncate">
+                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 space-y-1">
+                  <span className="text-xs font-medium text-slate-500 dark:text-slate-400 block">
+                    Top Method
+                  </span>
+                  <div className="font-display text-xl font-bold text-slate-900 dark:text-slate-100 truncate">
                     {metrics.topMethod}
                   </div>
-                  <span className="text-xs text-slate-500 font-mono-tabular block">
+                  <span className="text-xs text-slate-500 dark:text-slate-400 font-mono-tabular block">
                     {formatINR(metrics.topMethodAmount)}
                   </span>
                 </div>
@@ -1108,11 +1273,11 @@ export default function App() {
               {(activeView === 'overview' || activeView === 'ledger') && (
                 <section
                   aria-label="Expense Filters"
-                  className="bg-white border border-slate-200 rounded-xl p-4 space-y-3"
+                  className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 space-y-3"
                 >
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
                     <div className="relative lg:col-span-2">
-                      <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      <Search className="w-4 h-4 text-slate-400 dark:text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                       <input
                         type="text"
                         value={filters.search}
@@ -1120,7 +1285,7 @@ export default function App() {
                           setFilters((prev) => ({ ...prev, search: e.target.value }))
                         }
                         placeholder="Search descriptions..."
-                        className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-200 text-xs text-slate-900 focus:outline-none focus:border-teal-600"
+                        className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-teal-600 dark:focus:border-teal-400"
                       />
                     </div>
 
@@ -1130,7 +1295,7 @@ export default function App() {
                       onChange={(e) =>
                         setFilters((prev) => ({ ...prev, memberUid: e.target.value }))
                       }
-                      className="px-3 py-2 rounded-lg border border-slate-200 text-xs text-slate-800 bg-white focus:outline-none focus:border-teal-600"
+                      className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-xs text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-950 focus:outline-none focus:border-teal-600 dark:focus:border-teal-400"
                     >
                       <option value="all">All Members</option>
                       {members.map((m) => (
@@ -1146,7 +1311,7 @@ export default function App() {
                       onChange={(e) =>
                         setFilters((prev) => ({ ...prev, paymentMethod: e.target.value }))
                       }
-                      className="px-3 py-2 rounded-lg border border-slate-200 text-xs text-slate-800 bg-white focus:outline-none focus:border-teal-600"
+                      className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-xs text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-950 focus:outline-none focus:border-teal-600 dark:focus:border-teal-400"
                     >
                       <option value="all">All Payment Methods</option>
                       {PAYMENT_METHODS.map((m) => (
@@ -1163,7 +1328,7 @@ export default function App() {
                       onChange={(e) =>
                         setFilters((prev) => ({ ...prev, startDate: e.target.value }))
                       }
-                      className="px-3 py-2 rounded-lg border border-slate-200 font-mono-tabular text-xs text-slate-800 focus:outline-none focus:border-teal-600"
+                      className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 font-mono-tabular text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:border-teal-600 dark:focus:border-teal-400"
                     />
 
                     <input
@@ -1173,14 +1338,14 @@ export default function App() {
                       onChange={(e) =>
                         setFilters((prev) => ({ ...prev, endDate: e.target.value }))
                       }
-                      className="px-3 py-2 rounded-lg border border-slate-200 font-mono-tabular text-xs text-slate-800 focus:outline-none focus:border-teal-600"
+                      className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 font-mono-tabular text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:border-teal-600 dark:focus:border-teal-400"
                     />
                   </div>
 
                   {/* Interactive Multi-Tag Filter Buttons */}
                   <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
                     <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="text-[11px] font-medium text-slate-500 mr-1">
+                      <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 mr-1">
                         Filter tags:
                       </span>
                       {tags.map((tag) => {
@@ -1192,8 +1357,8 @@ export default function App() {
                             onClick={() => toggleFilterTag(tag.id)}
                             className={`px-2.5 py-1 rounded-md text-[11px] font-medium border transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                               active
-                                ? 'bg-slate-900 text-white border-slate-900'
-                                : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                                ? 'bg-slate-900 dark:bg-teal-600 text-white border-slate-900 dark:border-teal-600'
+                                : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
                             }`}
                           >
                             {tag.name}
@@ -1206,7 +1371,7 @@ export default function App() {
                       <button
                         type="button"
                         onClick={() => setFilters(EMPTY_FILTERS)}
-                        className="text-xs font-medium text-teal-700 hover:text-teal-800 whitespace-nowrap shrink-0 cursor-pointer"
+                        className="text-xs font-medium text-teal-700 dark:text-teal-400 hover:text-teal-800 dark:hover:text-teal-300 whitespace-nowrap shrink-0 cursor-pointer"
                       >
                         Reset Filters
                       </button>
@@ -1218,26 +1383,26 @@ export default function App() {
               {activeView === 'overview' && (
                 <>
                   {(balanceReport.totalUnsettledAmount > 0 || Math.abs(currentUserNetBalance) > 0.009) && (
-                    <div className="bg-white border border-slate-200 rounded-xl px-5 py-3.5 flex flex-wrap items-center justify-between gap-3">
-                      <div className="text-xs sm:text-sm text-slate-700">
+                    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-5 py-3.5 flex flex-wrap items-center justify-between gap-3">
+                      <div className="text-xs sm:text-sm text-slate-700 dark:text-slate-300">
                         {currentUserNetBalance > 0.009 ? (
                           <span>
                             Your split balance:{' '}
-                            <strong className="font-mono-tabular text-emerald-700">
+                            <strong className="font-mono-tabular text-emerald-700 dark:text-emerald-400">
                               You are owed {formatINR(currentUserNetBalance)}
                             </strong>
                           </span>
                         ) : currentUserNetBalance < -0.009 ? (
                           <span>
                             Your split balance:{' '}
-                            <strong className="font-mono-tabular text-red-700">
+                            <strong className="font-mono-tabular text-red-700 dark:text-red-400">
                               You owe {formatINR(Math.abs(currentUserNetBalance))}
                             </strong>
                           </span>
                         ) : (
                           <span>
                             Unsettled group balance:{' '}
-                            <strong className="font-mono-tabular text-slate-900">
+                            <strong className="font-mono-tabular text-slate-900 dark:text-slate-100">
                               {formatINR(balanceReport.totalUnsettledAmount)}
                             </strong>
                           </span>
@@ -1246,7 +1411,7 @@ export default function App() {
                       <button
                         type="button"
                         onClick={() => setActiveView('splits')}
-                        className="text-xs font-semibold text-teal-700 hover:text-teal-800 cursor-pointer"
+                        className="text-xs font-semibold text-teal-700 dark:text-teal-400 hover:text-teal-800 dark:hover:text-teal-300 cursor-pointer"
                       >
                         View Balances &amp; Settle Up &rarr;
                       </button>
@@ -1259,11 +1424,26 @@ export default function App() {
                       await updateProjectBudget(activeProject.id, budget);
                     }}
                   />
+                  <SpendingInsightsCard
+                    expenses={expenses}
+                    tags={tags}
+                    activeTagFilters={filters.tagIds}
+                    onFilterByTag={toggleFilterTag}
+                    onInspectExpense={(exp) => {
+                      setEditingExpense(exp);
+                      setExpenseModalOpen(true);
+                    }}
+                    onAddExpense={() => {
+                      setEditingExpense(null);
+                      setExpenseModalOpen(true);
+                    }}
+                  />
                   <AnalyticsCharts
                     expenses={filteredExpenses}
                     tags={tags}
                     timeframe={timeframe}
                     onTimeframeChange={setTimeframe}
+                    isDark={isDark}
                   />
                   <ExpenseTable
                     expenses={filteredExpenses}
@@ -1292,7 +1472,7 @@ export default function App() {
                       type="button"
                       disabled={filteredExpenses.length === 0}
                       onClick={handleExportCsv}
-                      className="px-3.5 py-2 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-700 hover:bg-slate-50 inline-flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                      className="px-3.5 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 inline-flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
                     >
                       <Download className="w-3.5 h-3.5" />
                       <span>Export CSV</span>
@@ -1341,27 +1521,27 @@ export default function App() {
               {activeView === 'manage' && (
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                   {/* Tags Management */}
-                  <div className="lg:col-span-7 bg-white border border-slate-200 rounded-xl p-6 space-y-5">
+                  <div className="lg:col-span-7 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 space-y-5">
                     <div className="flex items-center justify-between gap-4">
                       <div>
-                        <h2 className="font-display text-base font-bold text-slate-900">
+                        <h2 className="font-display text-base font-bold text-slate-900 dark:text-slate-100">
                           Project Tags
                         </h2>
-                        <p className="text-xs text-slate-500 mt-0.5">
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                           Seeded system categories and custom tags for {activeProject.name}
                         </p>
                       </div>
                       <button
                         type="button"
                         onClick={() => setTagModalOpen(true)}
-                        className="px-3.5 py-2 rounded-lg bg-teal-700 hover:bg-teal-800 text-white text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
+                        className="px-3.5 py-2 rounded-lg bg-teal-700 hover:bg-teal-800 dark:bg-teal-600 dark:hover:bg-teal-500 text-white text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
                       >
                         <Plus className="w-3.5 h-3.5" />
                         <span>Create Custom Tag</span>
                       </button>
                     </div>
 
-                    <div className="divide-y divide-slate-100">
+                    <div className="divide-y divide-slate-100 dark:divide-slate-800">
                       {tags.map((tag) => (
                         <div
                           key={tag.id}
@@ -1372,15 +1552,17 @@ export default function App() {
                               className="w-3.5 h-3.5 rounded-xs shrink-0"
                               style={{ backgroundColor: tag.color }}
                             />
-                            <span className="font-medium text-slate-900 truncate">{tag.name}</span>
+                            <span className="font-medium text-slate-900 dark:text-slate-100 truncate">
+                              {tag.name}
+                            </span>
                             {tag.parentCategory && (
-                              <span className="text-xs text-slate-500">
+                              <span className="text-xs text-slate-500 dark:text-slate-400">
                                 · Sub-tag of {tag.parentCategory}
                               </span>
                             )}
                           </div>
                           <div className="flex items-center gap-3 shrink-0">
-                            <span className="text-xs text-slate-400">
+                            <span className="text-xs text-slate-400 dark:text-slate-500">
                               {tag.isSystem ? 'System' : 'Custom'}
                             </span>
                             {!tag.isSystem && (
@@ -1388,7 +1570,7 @@ export default function App() {
                                 type="button"
                                 onClick={() => void deleteCustomTag(activeProject.id, tag.id)}
                                 aria-label={`Delete tag ${tag.name}`}
-                                className="p-1.5 rounded text-slate-400 hover:text-red-700 hover:bg-red-50 cursor-pointer"
+                                className="p-1.5 rounded text-slate-400 dark:text-slate-500 hover:text-red-700 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 cursor-pointer"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
@@ -1400,36 +1582,36 @@ export default function App() {
                   </div>
 
                   {/* Members & Invitations */}
-                  <div className="lg:col-span-5 bg-white border border-slate-200 rounded-xl p-6 space-y-5">
+                  <div className="lg:col-span-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 space-y-5">
                     <div className="flex items-center justify-between gap-4">
                       <div>
-                        <h2 className="font-display text-base font-bold text-slate-900">
+                        <h2 className="font-display text-base font-bold text-slate-900 dark:text-slate-100">
                           Collaborators
                         </h2>
-                        <p className="text-xs text-slate-500 mt-0.5">
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                           Invite members by Gmail address
                         </p>
                       </div>
                       <button
                         type="button"
                         onClick={() => setInviteModalOpen(true)}
-                        className="px-3.5 py-2 rounded-lg border border-slate-200 text-xs font-semibold text-slate-800 hover:bg-slate-50 inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
+                        className="px-3.5 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-800 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
                       >
                         <UserPlus className="w-3.5 h-3.5" />
                         <span>Invite</span>
                       </button>
                     </div>
 
-                    <div className="divide-y divide-slate-100">
+                    <div className="divide-y divide-slate-100 dark:divide-slate-800">
                       {members.map((m) => (
                         <div key={m.uid} className="py-2.5 flex items-center justify-between gap-3">
                           <div className="flex items-center gap-2.5 min-w-0">
                             <UserAvatar name={m.displayName} photoURL={m.photoURL} size="sm" />
-                            <span className="text-sm font-medium text-slate-900 truncate">
+                            <span className="text-sm font-medium text-slate-900 dark:text-slate-100 truncate">
                               {m.displayName}
                             </span>
                           </div>
-                          <span className="text-xs text-slate-500 capitalize shrink-0">
+                          <span className="text-xs text-slate-500 dark:text-slate-400 capitalize shrink-0">
                             {m.role}
                           </span>
                         </div>
@@ -1437,8 +1619,8 @@ export default function App() {
                     </div>
 
                     {sentInvites.filter((i) => i.status === 'pending').length > 0 && (
-                      <div className="pt-4 border-t border-slate-200 space-y-2">
-                        <h3 className="text-xs font-semibold text-slate-600">
+                      <div className="pt-4 border-t border-slate-200 dark:border-slate-800 space-y-2">
+                        <h3 className="text-xs font-semibold text-slate-600 dark:text-slate-400">
                           Awaiting Sign-In
                         </h3>
                         {sentInvites
@@ -1446,13 +1628,13 @@ export default function App() {
                           .map((inv) => (
                             <div
                               key={inv.id}
-                              className="py-1.5 flex items-center justify-between gap-2 text-xs text-slate-600"
+                              className="py-1.5 flex items-center justify-between gap-2 text-xs text-slate-600 dark:text-slate-400"
                             >
                               <span className="truncate">{inv.invitedEmail}</span>
                               <button
                                 type="button"
                                 onClick={() => void revokeInvite(inv.id)}
-                                className="text-red-600 hover:underline cursor-pointer shrink-0"
+                                className="text-red-600 dark:text-red-400 hover:underline cursor-pointer shrink-0"
                               >
                                 Revoke
                               </button>
@@ -1474,7 +1656,7 @@ export default function App() {
           type="button"
           onClick={() => setAiDrawerOpen(true)}
           aria-label="Open AI Expense Chat"
-          className="fixed bottom-5 right-5 z-30 h-12 px-4 rounded-full bg-slate-900 hover:bg-slate-800 text-white shadow-lg flex items-center gap-2 text-xs font-semibold transition-transform hover:scale-[1.02] cursor-pointer"
+          className="fixed bottom-5 right-5 z-30 h-12 px-4 rounded-full bg-slate-900 dark:bg-slate-800 hover:bg-slate-800 dark:hover:bg-slate-700 border border-transparent dark:border-slate-700 text-white shadow-lg flex items-center gap-2 text-xs font-semibold transition-transform hover:scale-[1.02] cursor-pointer"
         >
           <MessageSquareText className="w-4 h-4 text-teal-400" />
           <span>Ask AI to Log Expense</span>
@@ -1560,13 +1742,15 @@ export default function App() {
         <div
           role="dialog"
           aria-modal="true"
-          className="fixed inset-0 z-50 bg-slate-900/40 flex items-center justify-center p-4"
+          className="fixed inset-0 z-50 bg-slate-900/40 dark:bg-slate-950/70 flex items-center justify-center p-4"
         >
-          <div className="bg-white border border-slate-200 rounded-xl w-full max-w-sm p-6 space-y-4">
-            <h3 className="font-display text-base font-bold text-slate-900">Delete Expense?</h3>
-            <p className="text-sm text-slate-600">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl w-full max-w-sm p-6 space-y-4">
+            <h3 className="font-display text-base font-bold text-slate-900 dark:text-slate-100">
+              Delete Expense?
+            </h3>
+            <p className="text-sm text-slate-600 dark:text-slate-400">
               Remove{' '}
-              <span className="font-semibold text-slate-900">
+              <span className="font-semibold text-slate-900 dark:text-slate-100">
                 {confirmDeleteExpense.description || 'this expense'}
               </span>{' '}
               ({formatINR(confirmDeleteExpense.amount)}) from {activeProject.name}?
@@ -1575,7 +1759,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => setConfirmDeleteExpense(null)}
-                className="px-4 py-2 text-xs font-medium rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 cursor-pointer"
+                className="px-4 py-2 text-xs font-medium rounded-lg border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer"
               >
                 Cancel
               </button>
@@ -1601,19 +1785,24 @@ export default function App() {
         <div
           role="dialog"
           aria-modal="true"
-          className="fixed inset-0 z-50 bg-slate-900/40 flex items-center justify-center p-4"
+          className="fixed inset-0 z-50 bg-slate-900/40 dark:bg-slate-950/70 flex items-center justify-center p-4"
         >
-          <div className="bg-white border border-slate-200 rounded-xl w-full max-w-sm p-6 space-y-4">
-            <h3 className="font-display text-base font-bold text-slate-900">Delete Project?</h3>
-            <p className="text-sm text-slate-600">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl w-full max-w-sm p-6 space-y-4">
+            <h3 className="font-display text-base font-bold text-slate-900 dark:text-slate-100">
+              Delete Project?
+            </h3>
+            <p className="text-sm text-slate-600 dark:text-slate-400">
               Are you sure you want to delete{' '}
-              <span className="font-semibold text-slate-900">{confirmDeleteProject.name}</span>?
+              <span className="font-semibold text-slate-900 dark:text-slate-100">
+                {confirmDeleteProject.name}
+              </span>
+              ?
             </p>
             <div className="flex items-center justify-end gap-3">
               <button
                 type="button"
                 onClick={() => setConfirmDeleteProject(null)}
-                className="px-4 py-2 text-xs font-medium rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 cursor-pointer"
+                className="px-4 py-2 text-xs font-medium rounded-lg border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer"
               >
                 Cancel
               </button>

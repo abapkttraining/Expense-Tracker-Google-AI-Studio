@@ -71,15 +71,15 @@ export function MonthlyBudgetCard({
     return (
       <section
         aria-label="Configure Monthly Budget"
-        className="bg-white border border-slate-200 rounded-xl p-5"
+        className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5"
       >
         <form onSubmit={handleSubmit} className="space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <h2 className="font-display text-sm font-bold text-slate-900">
+              <h2 className="font-display text-sm font-bold text-slate-900 dark:text-slate-100">
                 Monthly Spending Limit — {project.name}
               </h2>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-slate-500 dark:text-slate-400">
                 Set a maximum monthly cap in ₹ to trigger alerts at 50%, 80%, 90%, 95%, and 100%
                 usage. Leave blank to disable.
               </p>
@@ -88,7 +88,7 @@ export function MonthlyBudgetCard({
 
           <div className="flex flex-wrap items-center gap-3">
             <div className="relative flex-1 min-w-[200px] max-w-xs">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-500 font-mono-tabular">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-500 dark:text-slate-400 font-mono-tabular">
                 ₹
               </span>
               <input
@@ -98,7 +98,7 @@ export function MonthlyBudgetCard({
                 value={budgetInput}
                 onChange={(e) => setBudgetInput(e.target.value)}
                 placeholder="e.g. 25000"
-                className="w-full pl-7 pr-3 py-2 rounded-lg border border-slate-200 font-mono-tabular text-sm text-slate-900 focus:outline-none focus:border-teal-600"
+                className="w-full pl-7 pr-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 font-mono-tabular text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-teal-600"
               />
             </div>
 
@@ -124,7 +124,7 @@ export function MonthlyBudgetCard({
                     setSaving(false);
                   }
                 }}
-                className="px-3 py-2 rounded-lg border border-slate-200 text-xs font-medium text-red-700 hover:bg-red-50 cursor-pointer"
+                className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-medium text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/50 cursor-pointer"
               >
                 Remove Limit
               </button>
@@ -138,7 +138,7 @@ export function MonthlyBudgetCard({
                 setError(null);
                 setBudgetInput(budget ? String(budget) : '');
               }}
-              className="px-3 py-2 rounded-lg border border-slate-200 text-xs font-medium text-slate-700 hover:bg-slate-50 cursor-pointer"
+              className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer"
             >
               Cancel
             </button>
@@ -147,7 +147,7 @@ export function MonthlyBudgetCard({
           {error && (
             <div
               role="alert"
-              className="p-2.5 rounded-lg bg-red-50 border border-red-200 text-xs text-red-700"
+              className="p-2.5 rounded-lg bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-900 text-xs text-red-700 dark:text-red-300"
             >
               {error}
             </div>
@@ -161,25 +161,25 @@ export function MonthlyBudgetCard({
     return (
       <section
         aria-label="Monthly Budget"
-        className="bg-white border border-slate-200 rounded-xl px-5 py-4 flex flex-wrap items-center justify-between gap-4"
+        className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-5 py-4 flex flex-wrap items-center justify-between gap-4"
       >
         <div className="flex items-center gap-3 min-w-0">
-          <Target className="w-4 h-4 text-slate-400 shrink-0" />
+          <Target className="w-4 h-4 text-slate-400 dark:text-slate-500 shrink-0" />
           <div className="min-w-0">
-            <h2 className="font-display text-sm font-bold text-slate-900">
+            <h2 className="font-display text-sm font-bold text-slate-900 dark:text-slate-100">
               Monthly Budget Limit
             </h2>
-            <p className="text-xs text-slate-500">
-              Spent <span className="font-mono-tabular font-semibold text-slate-700">{formatINR(thisMonthSpend)}</span> in {monthLabel} · No spending cap configured yet
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Spent <span className="font-mono-tabular font-semibold text-slate-700 dark:text-slate-200">{formatINR(thisMonthSpend)}</span> in {monthLabel} · No spending cap configured yet
             </p>
           </div>
         </div>
         <button
           type="button"
           onClick={() => setEditing(true)}
-          className="px-3.5 py-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-800 inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
+          className="px-3.5 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-semibold text-slate-800 dark:text-slate-200 inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
         >
-          <Target className="w-3.5 h-3.5 text-teal-700" />
+          <Target className="w-3.5 h-3.5 text-teal-700 dark:text-teal-400" />
           <span>Set Monthly Budget</span>
         </button>
       </section>
@@ -208,24 +208,24 @@ export function MonthlyBudgetCard({
           : 'bg-teal-600';
 
   const statusTextColor = isExceeded
-    ? 'text-red-700'
+    ? 'text-red-700 dark:text-red-400'
     : isCritical
-      ? 'text-rose-700'
+      ? 'text-rose-700 dark:text-rose-400'
       : isHigh
-        ? 'text-orange-700'
+        ? 'text-orange-700 dark:text-orange-400'
         : isApproaching
-          ? 'text-amber-700'
-          : 'text-teal-700';
+          ? 'text-amber-700 dark:text-amber-400'
+          : 'text-teal-700 dark:text-teal-400';
 
   const alertSurfaceClass = isExceeded
-    ? 'bg-red-50/70 border-red-200'
+    ? 'bg-red-50/70 dark:bg-red-950/30 border-red-200 dark:border-red-900/70'
     : isCritical
-      ? 'bg-rose-50/70 border-rose-200'
+      ? 'bg-rose-50/70 dark:bg-rose-950/30 border-rose-200 dark:border-rose-900/70'
       : isHigh
-        ? 'bg-orange-50/70 border-orange-200'
+        ? 'bg-orange-50/70 dark:bg-orange-950/30 border-orange-200 dark:border-orange-900/70'
         : isApproaching
-          ? 'bg-amber-50/70 border-amber-200'
-          : 'bg-white border-slate-200';
+          ? 'bg-amber-50/70 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900/70'
+          : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800';
 
   return (
     <section
@@ -235,7 +235,7 @@ export function MonthlyBudgetCard({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="space-y-1 min-w-0">
           <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-            <h2 className="font-display text-sm font-bold text-slate-900">
+            <h2 className="font-display text-sm font-bold text-slate-900 dark:text-slate-100">
               Monthly Budget ({monthLabel})
             </h2>
             <span className={`inline-flex items-center gap-1 text-xs font-semibold ${statusTextColor}`}>
@@ -272,11 +272,11 @@ export function MonthlyBudgetCard({
               )}
             </span>
           </div>
-          <p className="text-xs text-slate-600">
+          <p className="text-xs text-slate-600 dark:text-slate-400">
             {isExceeded ? (
               <>
                 Exceeded monthly limit by{' '}
-                <span className="font-mono-tabular font-semibold text-red-700">
+                <span className="font-mono-tabular font-semibold text-red-700 dark:text-red-400">
                   {formatINR(Math.abs(remaining))}
                 </span>
               </>
@@ -290,7 +290,7 @@ export function MonthlyBudgetCard({
               </>
             ) : (
               <>
-                <span className="font-mono-tabular font-semibold text-slate-800">
+                <span className="font-mono-tabular font-semibold text-slate-800 dark:text-slate-200">
                   {formatINR(remaining)}
                 </span>{' '}
                 remaining of your monthly cap
@@ -301,9 +301,11 @@ export function MonthlyBudgetCard({
 
         <div className="flex items-center gap-3 shrink-0">
           <div className="text-right font-mono-tabular">
-            <div className="text-sm font-bold text-slate-900">
+            <div className="text-sm font-bold text-slate-900 dark:text-slate-100">
               {formatINR(thisMonthSpend)}{' '}
-              <span className="text-xs font-normal text-slate-500">/ {formatINR(budget)}</span>
+              <span className="text-xs font-normal text-slate-500 dark:text-slate-400">
+                / {formatINR(budget)}
+              </span>
             </div>
             <div className={`text-xs font-semibold ${statusTextColor}`}>{percent}% used</div>
           </div>
@@ -312,7 +314,7 @@ export function MonthlyBudgetCard({
             type="button"
             onClick={() => setEditing(true)}
             aria-label="Edit monthly budget"
-            className="p-2 rounded-lg border border-slate-200 bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-50 cursor-pointer"
+            className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer"
           >
             <Pencil className="w-3.5 h-3.5" />
           </button>
@@ -326,7 +328,7 @@ export function MonthlyBudgetCard({
         aria-valuemin={0}
         aria-valuemax={100}
         aria-label={`Monthly budget usage ${percent}%`}
-        className="w-full h-2.5 bg-slate-200/80 rounded-full overflow-hidden"
+        className="w-full h-2.5 bg-slate-200/80 dark:bg-slate-800 rounded-full overflow-hidden"
       >
         <div
           className={`h-full rounded-full transition-all duration-300 ${barColorClass}`}

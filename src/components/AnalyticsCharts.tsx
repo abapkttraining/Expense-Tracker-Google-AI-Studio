@@ -33,6 +33,7 @@ interface AnalyticsChartsProps {
   tags: Tag[];
   timeframe: Timeframe;
   onTimeframeChange: (tf: Timeframe) => void;
+  isDark?: boolean;
 }
 
 function getWeekStartKey(dateStr: string): string {
@@ -69,6 +70,7 @@ export function AnalyticsCharts({
   tags,
   timeframe,
   onTimeframeChange,
+  isDark = false,
 }: AnalyticsChartsProps) {
   const [trendStyle, setTrendStyle] = useState<'bar' | 'line'>('bar');
 
@@ -157,6 +159,10 @@ export function AnalyticsCharts({
     [trendSeries, trendStyle]
   );
 
+  const gridColor = isDark ? '#1E293B' : '#F1F5F9';
+  const tickColor = isDark ? '#94A3B8' : '#64748B';
+  const labelColor = isDark ? '#CBD5E1' : '#334155';
+
   const trendOptions: ChartOptions<'bar'> & ChartOptions<'line'> = {
     responsive: true,
     maintainAspectRatio: false,
@@ -171,13 +177,13 @@ export function AnalyticsCharts({
     scales: {
       x: {
         grid: { display: false },
-        ticks: { color: '#64748B', font: { size: 11 } },
+        ticks: { color: tickColor, font: { size: 11 } },
       },
       y: {
         beginAtZero: true,
-        grid: { color: '#F1F5F9' },
+        grid: { color: gridColor },
         ticks: {
-          color: '#64748B',
+          color: tickColor,
           font: { size: 11 },
           callback: (val) => `₹${Number(val).toLocaleString('en-IN')}`,
         },
@@ -192,13 +198,13 @@ export function AnalyticsCharts({
         {
           data: tagBreakdown.map((t) => t.amount),
           backgroundColor: tagBreakdown.map((t) => t.color),
-          borderColor: '#FFFFFF',
+          borderColor: isDark ? '#0F172A' : '#FFFFFF',
           borderWidth: 2,
           hoverOffset: 4,
         },
       ],
     }),
-    [tagBreakdown]
+    [tagBreakdown, isDark]
   );
 
   const doughnutOptions: ChartOptions<'doughnut'> = {
@@ -246,16 +252,16 @@ export function AnalyticsCharts({
     scales: {
       x: {
         beginAtZero: true,
-        grid: { color: '#F1F5F9' },
+        grid: { color: gridColor },
         ticks: {
-          color: '#64748B',
+          color: tickColor,
           font: { size: 11 },
           callback: (val) => `₹${Number(val).toLocaleString('en-IN')}`,
         },
       },
       y: {
         grid: { display: false },
-        ticks: { color: '#334155', font: { size: 11, weight: 500 } },
+        ticks: { color: labelColor, font: { size: 11, weight: 500 } },
       },
     },
   };
@@ -270,18 +276,18 @@ export function AnalyticsCharts({
   return (
     <section aria-label="Spending Analytics" className="space-y-6">
       {/* Trend Chart */}
-      <div className="bg-white border border-slate-200 rounded-xl p-5 sm:p-6">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 sm:p-6">
         <div className="flex flex-wrap items-center justify-between gap-4 mb-5">
           <div>
-            <h2 className="font-display text-base font-bold text-slate-900">
+            <h2 className="font-display text-base font-bold text-slate-900 dark:text-slate-100">
               Expense Trend
             </h2>
-            <p className="text-xs text-slate-500 mt-0.5">
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
               Spending trajectory aggregated by selected timeframe
             </p>
           </div>
           <div className="flex items-center gap-3 flex-wrap">
-            <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-lg">
+            <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg">
               {timeframes.map((tf) => (
                 <button
                   key={tf.id}
@@ -289,22 +295,22 @@ export function AnalyticsCharts({
                   onClick={() => onTimeframeChange(tf.id)}
                   className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                     timeframe === tf.id
-                      ? 'bg-white text-slate-900 shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900'
+                      ? 'bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 shadow-xs'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
                   }`}
                 >
                   {tf.label}
                 </button>
               ))}
             </div>
-            <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-lg">
+            <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg">
               <button
                 type="button"
                 onClick={() => setTrendStyle('bar')}
                 className={`px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                   trendStyle === 'bar'
-                    ? 'bg-white text-slate-900 shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
+                    ? 'bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
                 }`}
               >
                 Bar
@@ -314,8 +320,8 @@ export function AnalyticsCharts({
                 onClick={() => setTrendStyle('line')}
                 className={`px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                   trendStyle === 'line'
-                    ? 'bg-white text-slate-900 shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
+                    ? 'bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
                 }`}
               >
                 Line
@@ -325,7 +331,7 @@ export function AnalyticsCharts({
         </div>
 
         {expenses.length === 0 ? (
-          <div className="h-64 flex items-center justify-center text-sm text-slate-500 border border-dashed border-slate-200 rounded-lg">
+          <div className="h-64 flex items-center justify-center text-sm text-slate-500 dark:text-slate-400 border border-dashed border-slate-200 dark:border-slate-700 rounded-lg">
             No matching expenses to plot for the selected filters.
           </div>
         ) : (
@@ -341,17 +347,17 @@ export function AnalyticsCharts({
 
       {/* Tag Doughnut + Payment Method Horizontal Bar */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white border border-slate-200 rounded-xl p-5 sm:p-6">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 sm:p-6">
           <div className="mb-5">
-            <h2 className="font-display text-base font-bold text-slate-900">
+            <h2 className="font-display text-base font-bold text-slate-900 dark:text-slate-100">
               Spending by Tag
             </h2>
-            <p className="text-xs text-slate-500 mt-0.5">
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
               Weighted allocation across system and custom tags
             </p>
           </div>
           {tagBreakdown.length === 0 ? (
-            <div className="h-60 flex items-center justify-center text-sm text-slate-500 border border-dashed border-slate-200 rounded-lg">
+            <div className="h-60 flex items-center justify-center text-sm text-slate-500 dark:text-slate-400 border border-dashed border-slate-200 dark:border-slate-700 rounded-lg">
               Tag breakdown appears once expenses are logged.
             </div>
           ) : (
@@ -359,7 +365,7 @@ export function AnalyticsCharts({
               <div className="sm:col-span-5 h-52">
                 <Doughnut data={doughnutData} options={doughnutOptions} />
               </div>
-              <div className="sm:col-span-7 max-h-52 overflow-y-auto divide-y divide-slate-100 pr-1">
+              <div className="sm:col-span-7 max-h-52 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 pr-1">
                 {tagBreakdown.map((item) => (
                   <div
                     key={item.id}
@@ -370,11 +376,15 @@ export function AnalyticsCharts({
                         className="w-2.5 h-2.5 rounded-xs shrink-0"
                         style={{ backgroundColor: item.color }}
                       />
-                      <span className="font-medium text-slate-800 truncate">{item.name}</span>
+                      <span className="font-medium text-slate-800 dark:text-slate-200 truncate">
+                        {item.name}
+                      </span>
                     </div>
                     <div className="flex items-center gap-2.5 shrink-0 font-mono-tabular">
-                      <span className="text-slate-500">{item.percent}%</span>
-                      <span className="font-semibold text-slate-900">{formatINR(item.amount)}</span>
+                      <span className="text-slate-500 dark:text-slate-400">{item.percent}%</span>
+                      <span className="font-semibold text-slate-900 dark:text-slate-100">
+                        {formatINR(item.amount)}
+                      </span>
                     </div>
                   </div>
                 ))}
@@ -383,17 +393,17 @@ export function AnalyticsCharts({
           )}
         </div>
 
-        <div className="bg-white border border-slate-200 rounded-xl p-5 sm:p-6">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 sm:p-6">
           <div className="mb-5">
-            <h2 className="font-display text-base font-bold text-slate-900">
+            <h2 className="font-display text-base font-bold text-slate-900 dark:text-slate-100">
               Payment Method Breakdown
             </h2>
-            <p className="text-xs text-slate-500 mt-0.5">
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
               Comparison across PhonePe, Google Pay, BHIM UPI, Paytm, Cards &amp; Cash
             </p>
           </div>
           {expenses.length === 0 ? (
-            <div className="h-60 flex items-center justify-center text-sm text-slate-500 border border-dashed border-slate-200 rounded-lg">
+            <div className="h-60 flex items-center justify-center text-sm text-slate-500 dark:text-slate-400 border border-dashed border-slate-200 dark:border-slate-700 rounded-lg">
               Payment channel totals appear once expenses are logged.
             </div>
           ) : (

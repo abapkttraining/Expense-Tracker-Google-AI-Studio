@@ -43,18 +43,18 @@ export function ExpenseTable({
 
   if (loading) {
     return (
-      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-        <div className="p-4 border-b border-slate-200 flex items-center justify-between">
-          <div className="h-5 w-36 bg-slate-100 rounded animate-pulse" />
-          <div className="h-4 w-24 bg-slate-100 rounded animate-pulse" />
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
+        <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+          <div className="h-5 w-36 bg-slate-100 dark:bg-slate-800 rounded animate-pulse" />
+          <div className="h-4 w-24 bg-slate-100 dark:bg-slate-800 rounded animate-pulse" />
         </div>
-        <div className="divide-y divide-slate-100">
+        <div className="divide-y divide-slate-100 dark:divide-slate-800">
           {[1, 2, 3, 4].map((n) => (
             <div key={n} className="px-5 py-3.5 flex items-center justify-between gap-4">
-              <div className="h-4 w-24 bg-slate-100 rounded animate-pulse" />
-              <div className="h-4 w-48 bg-slate-100 rounded animate-pulse" />
-              <div className="h-4 w-28 bg-slate-100 rounded animate-pulse" />
-              <div className="h-4 w-20 bg-slate-100 rounded animate-pulse" />
+              <div className="h-4 w-24 bg-slate-100 dark:bg-slate-800 rounded animate-pulse" />
+              <div className="h-4 w-48 bg-slate-100 dark:bg-slate-800 rounded animate-pulse" />
+              <div className="h-4 w-28 bg-slate-100 dark:bg-slate-800 rounded animate-pulse" />
+              <div className="h-4 w-20 bg-slate-100 dark:bg-slate-800 rounded animate-pulse" />
             </div>
           ))}
         </div>
@@ -64,12 +64,12 @@ export function ExpenseTable({
 
   if (expenses.length === 0) {
     return (
-      <div className="bg-white border border-slate-200 rounded-xl p-10 text-center space-y-4">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-10 text-center space-y-4">
         <div className="space-y-1.5 max-w-md mx-auto">
-          <h3 className="font-display text-base font-bold text-slate-900">
+          <h3 className="font-display text-base font-bold text-slate-900 dark:text-slate-100">
             {hasActiveFilters ? 'No expenses match your filters' : 'No expenses recorded yet'}
           </h3>
-          <p className="text-sm text-slate-600">
+          <p className="text-sm text-slate-600 dark:text-slate-400">
             {hasActiveFilters
               ? 'Adjust the member, payment method, tag, or date range filters to see entries.'
               : 'Log your first expense manually or describe it in plain English using the AI Expense Assistant.'}
@@ -80,7 +80,7 @@ export function ExpenseTable({
             <button
               type="button"
               onClick={onClearFilters}
-              className="px-4 py-2 text-sm font-medium rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
+              className="px-4 py-2 text-sm font-medium rounded-lg border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
             >
               Clear Filters
             </button>
@@ -100,11 +100,13 @@ export function ExpenseTable({
   }
 
   return (
-    <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-      <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between gap-4">
+    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
+      <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-4">
         <div className="flex items-baseline gap-3">
-          <h2 className="font-display text-base font-bold text-slate-900">Expense Ledger</h2>
-          <span className="text-xs text-slate-500 font-mono-tabular">
+          <h2 className="font-display text-base font-bold text-slate-900 dark:text-slate-100">
+            Expense Ledger
+          </h2>
+          <span className="text-xs text-slate-500 dark:text-slate-400 font-mono-tabular">
             {expenses.length} {expenses.length === 1 ? 'entry' : 'entries'}
           </span>
         </div>
@@ -113,7 +115,7 @@ export function ExpenseTable({
       <div className="overflow-x-auto">
         <table className="w-full text-left border-collapse">
           <thead>
-            <tr className="border-b border-slate-200 bg-slate-50/70 text-[11px] font-semibold text-slate-500 tracking-wide">
+            <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/60 text-[11px] font-semibold text-slate-500 dark:text-slate-400 tracking-wide">
               <th className="py-2.5 px-5 whitespace-nowrap">Date</th>
               <th className="py-2.5 px-4">Description &amp; Tags</th>
               <th className="py-2.5 px-4 whitespace-nowrap">Paid By</th>
@@ -122,7 +124,7 @@ export function ExpenseTable({
               <th className="py-2.5 px-5 text-right whitespace-nowrap">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100 text-sm">
+          <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-sm">
             {expenses.map((expense) => {
               const resolvedTags = expense.tagIds
                 .map((id) => tagMap.get(id))
@@ -132,20 +134,22 @@ export function ExpenseTable({
               return (
                 <tr
                   key={expense.id}
-                  className="hover:bg-slate-50/80 transition-colors group"
+                  className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors group"
                 >
-                  <td className="py-3 px-5 font-mono-tabular text-xs text-slate-600 whitespace-nowrap">
+                  <td className="py-3 px-5 font-mono-tabular text-xs text-slate-600 dark:text-slate-400 whitespace-nowrap">
                     {expense.date}
                   </td>
                   <td className="py-3 px-4 min-w-[220px]">
-                    <div className="font-medium text-slate-900 leading-snug">
+                    <div className="font-medium text-slate-900 dark:text-slate-100 leading-snug">
                       {expense.description?.trim() ? (
                         expense.description
                       ) : (
-                        <span className="text-slate-400 font-normal">No description</span>
+                        <span className="text-slate-400 dark:text-slate-500 font-normal">
+                          No description
+                        </span>
                       )}
                     </div>
-                    <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-slate-500">
+                    <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-slate-500 dark:text-slate-400">
                       {resolvedTags.length > 0 ? (
                         resolvedTags.map((tag, idx) => (
                           <span key={tag.id} className="inline-flex items-center gap-1.5">
@@ -161,13 +165,15 @@ export function ExpenseTable({
                       {splitLabel && (
                         <>
                           <span aria-hidden="true">·</span>
-                          <span className="text-indigo-700 font-medium">{splitLabel}</span>
+                          <span className="text-indigo-700 dark:text-indigo-400 font-medium">
+                            {splitLabel}
+                          </span>
                         </>
                       )}
                       {expense.isRecurring && expense.frequency && (
                         <>
                           <span aria-hidden="true">·</span>
-                          <span className="text-teal-700 font-medium">
+                          <span className="text-teal-700 dark:text-teal-400 font-medium">
                             Recurring ({formatFrequencyLabel(expense.frequency)}, due{' '}
                             {computeNextDueDate(expense)})
                           </span>
@@ -176,7 +182,7 @@ export function ExpenseTable({
                       {expense.source === 'ai_chat' && (
                         <>
                           <span aria-hidden="true">·</span>
-                          <span className="text-slate-400">AI entry</span>
+                          <span className="text-slate-400 dark:text-slate-500">AI entry</span>
                         </>
                       )}
                     </div>
@@ -188,15 +194,15 @@ export function ExpenseTable({
                         photoURL={expense.paidByPhoto}
                         size="xs"
                       />
-                      <span className="text-xs font-medium text-slate-700 truncate max-w-[130px]">
+                      <span className="text-xs font-medium text-slate-700 dark:text-slate-300 truncate max-w-[130px]">
                         {expense.paidByName}
                       </span>
                     </div>
                   </td>
-                  <td className="py-3 px-4 text-xs font-medium text-slate-700 whitespace-nowrap">
+                  <td className="py-3 px-4 text-xs font-medium text-slate-700 dark:text-slate-300 whitespace-nowrap">
                     {expense.paymentMethod}
                   </td>
-                  <td className="py-3 px-4 text-right font-mono-tabular font-semibold text-slate-900 whitespace-nowrap">
+                  <td className="py-3 px-4 text-right font-mono-tabular font-semibold text-slate-900 dark:text-slate-100 whitespace-nowrap">
                     {formatINR(expense.amount)}
                   </td>
                   <td className="py-3 px-5 text-right whitespace-nowrap">
@@ -205,7 +211,7 @@ export function ExpenseTable({
                         type="button"
                         onClick={() => onEdit(expense)}
                         aria-label={`Edit ${expense.description || 'expense'}`}
-                        className="p-2 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer"
+                        className="p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
                       >
                         <Pencil className="w-3.5 h-3.5" />
                       </button>
@@ -213,7 +219,7 @@ export function ExpenseTable({
                         type="button"
                         onClick={() => onDelete(expense)}
                         aria-label={`Delete ${expense.description || 'expense'}`}
-                        className="p-2 rounded-lg text-slate-500 hover:text-red-700 hover:bg-red-50 transition-colors cursor-pointer"
+                        className="p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:text-red-700 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/50 transition-colors cursor-pointer"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>

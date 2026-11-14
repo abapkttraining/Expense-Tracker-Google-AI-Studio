@@ -30,7 +30,7 @@ export function UserAvatar({ name, photoURL, size = 'sm' }: UserAvatarProps) {
         alt={name}
         referrerPolicy="no-referrer"
         onError={() => setFailed(true)}
-        className={`${sizeClass} rounded-full object-cover border border-slate-200 shrink-0 bg-slate-100`}
+        className={`${sizeClass} rounded-full object-cover border border-slate-200 dark:border-slate-700 shrink-0 bg-slate-100 dark:bg-slate-800`}
       />
     );
   }
@@ -38,7 +38,7 @@ export function UserAvatar({ name, photoURL, size = 'sm' }: UserAvatarProps) {
   return (
     <span
       aria-label={name}
-      className={`${sizeClass} rounded-full inline-flex items-center justify-center font-semibold bg-teal-50 text-teal-800 border border-teal-200 shrink-0 select-none`}
+      className={`${sizeClass} rounded-full inline-flex items-center justify-center font-semibold bg-teal-50 dark:bg-teal-950/70 text-teal-800 dark:text-teal-300 border border-teal-200 dark:border-teal-800 shrink-0 select-none`}
     >
       {initials || 'U'}
     </span>

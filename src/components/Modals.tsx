@@ -300,21 +300,23 @@ export function ExpenseModal({
       role="dialog"
       aria-modal="true"
       aria-label={editingExpense ? 'Edit Expense' : 'Add Expense'}
-      className="fixed inset-0 z-50 bg-slate-900/40 flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 bg-slate-900/40 dark:bg-black/60 flex items-center justify-center p-4"
     >
-      <div className="bg-white border border-slate-200 rounded-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
           <div>
-            <h2 className="font-display text-base font-bold text-slate-900">
+            <h2 className="font-display text-base font-bold text-slate-900 dark:text-slate-100">
               {editingExpense ? 'Edit Expense' : 'Add Expense'}
             </h2>
-            <p className="text-xs text-slate-500 mt-0.5">Project: {project.name}</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              Project: {project.name}
+            </p>
           </div>
           <button
             type="button"
             onClick={onClose}
             aria-label="Close modal"
-            className="p-2 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 cursor-pointer"
+            className="p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
@@ -323,7 +325,9 @@ export function ExpenseModal({
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <label className="space-y-1.5 block">
-              <span className="text-xs font-medium text-slate-700 block">Amount (₹)</span>
+              <span className="text-xs font-medium text-slate-700 dark:text-slate-300 block">
+                Amount (₹)
+              </span>
               <input
                 type="number"
                 step="any"
@@ -332,12 +336,14 @@ export function ExpenseModal({
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 placeholder="0.00"
-                className="w-full px-3 py-2 rounded-lg border border-slate-200 font-mono-tabular text-sm text-slate-900 focus:outline-none focus:border-teal-600"
+                className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 font-mono-tabular text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-teal-600"
               />
             </label>
 
             <label className="space-y-1.5 block">
-              <span className="text-xs font-medium text-slate-700 block">Date</span>
+              <span className="text-xs font-medium text-slate-700 dark:text-slate-300 block">
+                Date
+              </span>
               <input
                 type="date"
                 required
@@ -349,13 +355,13 @@ export function ExpenseModal({
                     setNextDueDate(addFrequencyToDate(val, frequency));
                   }
                 }}
-                className="w-full px-3 py-2 rounded-lg border border-slate-200 font-mono-tabular text-sm text-slate-900 focus:outline-none focus:border-teal-600"
+                className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 font-mono-tabular text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-teal-600"
               />
             </label>
           </div>
 
           <label className="space-y-1.5 block">
-            <span className="text-xs font-medium text-slate-700 block">
+            <span className="text-xs font-medium text-slate-700 dark:text-slate-300 block">
               Description (optional)
             </span>
             <input
@@ -364,17 +370,19 @@ export function ExpenseModal({
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="e.g. Dinner at Spice Route with friends"
-              className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm text-slate-900 focus:outline-none focus:border-teal-600"
+              className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-teal-600"
             />
           </label>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <label className="space-y-1.5 block">
-              <span className="text-xs font-medium text-slate-700 block">Paid By</span>
+              <span className="text-xs font-medium text-slate-700 dark:text-slate-300 block">
+                Paid By
+              </span>
               <select
                 value={paidByUid}
                 onChange={(e) => setPaidByUid(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm text-slate-900 bg-white focus:outline-none focus:border-teal-600"
+                className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-950 focus:outline-none focus:border-teal-600"
               >
                 {members.map((m) => (
                   <option key={m.uid} value={m.uid}>
@@ -385,11 +393,13 @@ export function ExpenseModal({
             </label>
 
             <label className="space-y-1.5 block">
-              <span className="text-xs font-medium text-slate-700 block">Payment Method</span>
+              <span className="text-xs font-medium text-slate-700 dark:text-slate-300 block">
+                Payment Method
+              </span>
               <select
                 value={paymentMethod}
                 onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
-                className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm text-slate-900 bg-white focus:outline-none focus:border-teal-600"
+                className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-950 focus:outline-none focus:border-teal-600"
               >
                 {PAYMENT_METHODS.map((m) => (
                   <option key={m} value={m}>
@@ -402,17 +412,17 @@ export function ExpenseModal({
 
           <div className="space-y-2.5">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-slate-700">
+              <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
                 Tags (select one or more)
               </span>
-              <span className="text-[11px] text-slate-500 font-mono-tabular">
+              <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono-tabular">
                 {selectedTags.length} selected
               </span>
             </div>
 
             {billSubTags.length > 0 && (
               <div className="space-y-1.5">
-                <span className="text-[11px] font-medium text-slate-500 block">
+                <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 block">
                   Bills Sub-tags
                 </span>
                 <div className="flex flex-wrap gap-1.5">
@@ -425,8 +435,8 @@ export function ExpenseModal({
                         onClick={() => toggleTag(tag.id)}
                         className={`px-2.5 py-1.5 rounded-md text-xs font-medium border transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                           active
-                            ? 'bg-slate-900 text-white border-slate-900'
-                            : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
+                            ? 'bg-slate-900 dark:bg-teal-600 text-white border-slate-900 dark:border-teal-600'
+                            : 'bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'
                         }`}
                       >
                         {tag.name}
@@ -438,7 +448,9 @@ export function ExpenseModal({
             )}
 
             <div className="space-y-1.5">
-              <span className="text-[11px] font-medium text-slate-500 block">Categories</span>
+              <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 block">
+                Categories
+              </span>
               <div className="flex flex-wrap gap-1.5">
                 {generalTags.map((tag) => {
                   const active = selectedTags.includes(tag.id);
@@ -449,8 +461,8 @@ export function ExpenseModal({
                       onClick={() => toggleTag(tag.id)}
                       className={`px-2.5 py-1.5 rounded-md text-xs font-medium border transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                         active
-                          ? 'bg-slate-900 text-white border-slate-900'
-                          : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
+                          ? 'bg-slate-900 dark:bg-teal-600 text-white border-slate-900 dark:border-teal-600'
+                          : 'bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'
                       }`}
                     >
                       {tag.name}
@@ -462,13 +474,13 @@ export function ExpenseModal({
           </div>
 
           {/* Recurring Schedule */}
-          <div className="pt-2 border-t border-slate-200 space-y-3">
+          <div className="pt-2 border-t border-slate-200 dark:border-slate-800 space-y-3">
             <label className="flex items-center justify-between gap-3 cursor-pointer">
               <div>
-                <span className="text-xs font-semibold text-slate-800 block">
+                <span className="text-xs font-semibold text-slate-800 dark:text-slate-200 block">
                   Recurring Bill / Subscription
                 </span>
-                <span className="text-[11px] text-slate-500 block">
+                <span className="text-[11px] text-slate-500 dark:text-slate-400 block">
                   Receive upcoming and overdue payment reminders
                 </span>
               </div>
@@ -487,9 +499,11 @@ export function ExpenseModal({
             </label>
 
             {isRecurring && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-50 border border-slate-200 rounded-lg p-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg p-3">
                 <label className="space-y-1 block">
-                  <span className="text-[11px] font-medium text-slate-600 block">Frequency</span>
+                  <span className="text-[11px] font-medium text-slate-600 dark:text-slate-400 block">
+                    Frequency
+                  </span>
                   <select
                     value={frequency}
                     onChange={(e) => {
@@ -497,7 +511,7 @@ export function ExpenseModal({
                       setFrequency(nextFreq);
                       setNextDueDate(addFrequencyToDate(date, nextFreq));
                     }}
-                    className="w-full px-2.5 py-1.5 rounded-md border border-slate-200 text-xs text-slate-900 bg-white focus:outline-none focus:border-teal-600"
+                    className="w-full px-2.5 py-1.5 rounded-md border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-900 focus:outline-none focus:border-teal-600"
                   >
                     {RECURRING_FREQUENCIES.map((freq) => (
                       <option key={freq} value={freq}>
@@ -508,7 +522,7 @@ export function ExpenseModal({
                 </label>
 
                 <label className="space-y-1 block">
-                  <span className="text-[11px] font-medium text-slate-600 block">
+                  <span className="text-[11px] font-medium text-slate-600 dark:text-slate-400 block">
                     Next Due Date
                   </span>
                   <input
@@ -516,7 +530,7 @@ export function ExpenseModal({
                     required={isRecurring}
                     value={nextDueDate}
                     onChange={(e) => setNextDueDate(e.target.value)}
-                    className="w-full px-2.5 py-1.5 rounded-md border border-slate-200 font-mono-tabular text-xs text-slate-900 bg-white focus:outline-none focus:border-teal-600"
+                    className="w-full px-2.5 py-1.5 rounded-md border border-slate-200 dark:border-slate-700 font-mono-tabular text-xs text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-900 focus:outline-none focus:border-teal-600"
                   />
                 </label>
               </div>
@@ -524,13 +538,13 @@ export function ExpenseModal({
           </div>
 
           {/* Split Expense Among Collaborators */}
-          <div className="pt-2 border-t border-slate-200 space-y-3">
+          <div className="pt-2 border-t border-slate-200 dark:border-slate-800 space-y-3">
             <div className="flex items-center justify-between gap-2">
               <div>
-                <span className="text-xs font-semibold text-slate-800 block">
+                <span className="text-xs font-semibold text-slate-800 dark:text-slate-200 block">
                   Split Expense
                 </span>
-                <span className="text-[11px] text-slate-500 block">
+                <span className="text-[11px] text-slate-500 dark:text-slate-400 block">
                   {members.length > 1
                     ? 'Track who owes whom across project collaborators'
                     : 'Invite collaborators to split expenses'}
@@ -540,14 +554,14 @@ export function ExpenseModal({
                 <button
                   type="button"
                   onClick={() => fillEqualValuesForMode(splitMode)}
-                  className="text-[11px] font-medium text-teal-700 hover:text-teal-800 cursor-pointer shrink-0"
+                  className="text-[11px] font-medium text-teal-700 dark:text-teal-400 hover:text-teal-800 dark:hover:text-teal-300 cursor-pointer shrink-0"
                 >
                   Distribute evenly
                 </button>
               )}
             </div>
 
-            <div className="grid grid-cols-4 gap-1.5 bg-slate-100 p-1 rounded-lg">
+            <div className="grid grid-cols-4 gap-1.5 bg-slate-100 dark:bg-slate-800 p-1 rounded-lg">
               {(
                 [
                   { id: 'none', label: 'No Split' },
@@ -564,8 +578,8 @@ export function ExpenseModal({
                     onClick={() => handleSplitModeChange(option.id)}
                     className={`py-1.5 px-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${
                       active
-                        ? 'bg-white text-slate-900 shadow-xs'
-                        : 'text-slate-600 hover:text-slate-900'
+                        ? 'bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 shadow-xs'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
                     }`}
                   >
                     {option.label}
@@ -575,8 +589,8 @@ export function ExpenseModal({
             </div>
 
             {splitMode === 'equal' && (
-              <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-2">
-                <div className="flex items-center justify-between text-[11px] text-slate-500">
+              <div className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg p-3 space-y-2">
+                <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
                   <span>Select participants ({equalUids.length} selected)</span>
                   <span className="font-mono-tabular">
                     {equalUids.length > 0 && numericAmount > 0
@@ -584,7 +598,7 @@ export function ExpenseModal({
                       : '₹0.00 / person'}
                   </span>
                 </div>
-                <div className="divide-y divide-slate-200/70">
+                <div className="divide-y divide-slate-200/70 dark:divide-slate-800">
                   {members.map((m) => {
                     const checked = equalUids.includes(m.uid);
                     const share = checked ? equalSharesPreview[m.uid] ?? 0 : 0;
@@ -601,13 +615,15 @@ export function ExpenseModal({
                             className="w-4 h-4 accent-teal-700 rounded cursor-pointer"
                           />
                           <UserAvatar name={m.displayName} photoURL={m.photoURL} size="xs" />
-                          <span className="text-xs font-medium text-slate-800 truncate">
+                          <span className="text-xs font-medium text-slate-800 dark:text-slate-200 truncate">
                             {m.displayName}
                           </span>
                         </span>
                         <span
                           className={`font-mono-tabular text-xs font-medium shrink-0 ${
-                            checked ? 'text-slate-900' : 'text-slate-400'
+                            checked
+                              ? 'text-slate-900 dark:text-slate-100'
+                              : 'text-slate-400 dark:text-slate-500'
                           }`}
                         >
                           {formatINR(share)}
@@ -620,14 +636,16 @@ export function ExpenseModal({
             )}
 
             {splitMode === 'exact' && (
-              <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-2">
+              <div className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg p-3 space-y-2">
                 <div className="flex items-center justify-between text-[11px]">
-                  <span className="text-slate-500">Enter exact ₹ share per member</span>
+                  <span className="text-slate-500 dark:text-slate-400">
+                    Enter exact ₹ share per member
+                  </span>
                   <span
                     className={`font-mono-tabular font-semibold ${
                       Math.abs(exactSum - numericAmount) <= 0.01 && numericAmount > 0
-                        ? 'text-emerald-700'
-                        : 'text-amber-700'
+                        ? 'text-emerald-700 dark:text-emerald-400'
+                        : 'text-amber-700 dark:text-amber-400'
                     }`}
                   >
                     {Math.abs(exactSum - numericAmount) <= 0.01 && numericAmount > 0
@@ -640,12 +658,12 @@ export function ExpenseModal({
                     <div key={m.uid} className="flex items-center justify-between gap-3">
                       <div className="flex items-center gap-2 min-w-0">
                         <UserAvatar name={m.displayName} photoURL={m.photoURL} size="xs" />
-                        <span className="text-xs font-medium text-slate-800 truncate">
+                        <span className="text-xs font-medium text-slate-800 dark:text-slate-200 truncate">
                           {m.displayName}
                         </span>
                       </div>
                       <div className="relative w-32 shrink-0">
-                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-400 font-mono-tabular">
+                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-400 dark:text-slate-500 font-mono-tabular">
                           ₹
                         </span>
                         <input
@@ -657,7 +675,7 @@ export function ExpenseModal({
                             setExactInputs((prev) => ({ ...prev, [m.uid]: e.target.value }))
                           }
                           placeholder="0.00"
-                          className="w-full pl-6 pr-2.5 py-1.5 rounded-md border border-slate-200 bg-white font-mono-tabular text-xs text-right text-slate-900 focus:outline-none focus:border-teal-600"
+                          className="w-full pl-6 pr-2.5 py-1.5 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-mono-tabular text-xs text-right text-slate-900 dark:text-slate-100 focus:outline-none focus:border-teal-600"
                         />
                       </div>
                     </div>
@@ -667,12 +685,16 @@ export function ExpenseModal({
             )}
 
             {splitMode === 'percentage' && (
-              <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-2">
+              <div className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg p-3 space-y-2">
                 <div className="flex items-center justify-between text-[11px]">
-                  <span className="text-slate-500">Enter percentage share (total 100%)</span>
+                  <span className="text-slate-500 dark:text-slate-400">
+                    Enter percentage share (total 100%)
+                  </span>
                   <span
                     className={`font-mono-tabular font-semibold ${
-                      Math.abs(percentSum - 100) <= 0.01 ? 'text-emerald-700' : 'text-amber-700'
+                      Math.abs(percentSum - 100) <= 0.01
+                        ? 'text-emerald-700 dark:text-emerald-400'
+                        : 'text-amber-700 dark:text-amber-400'
                     }`}
                   >
                     {Math.abs(percentSum - 100) <= 0.01
@@ -688,11 +710,11 @@ export function ExpenseModal({
                       <div key={m.uid} className="flex items-center justify-between gap-3">
                         <div className="flex items-center gap-2 min-w-0 flex-1">
                           <UserAvatar name={m.displayName} photoURL={m.photoURL} size="xs" />
-                          <span className="text-xs font-medium text-slate-800 truncate">
+                          <span className="text-xs font-medium text-slate-800 dark:text-slate-200 truncate">
                             {m.displayName}
                           </span>
                         </div>
-                        <span className="font-mono-tabular text-[11px] text-slate-500 shrink-0">
+                        <span className="font-mono-tabular text-[11px] text-slate-500 dark:text-slate-400 shrink-0">
                           {formatINR(rupeeShare)}
                         </span>
                         <div className="relative w-24 shrink-0">
@@ -706,9 +728,9 @@ export function ExpenseModal({
                               setPercentInputs((prev) => ({ ...prev, [m.uid]: e.target.value }))
                             }
                             placeholder="0"
-                            className="w-full pl-2.5 pr-6 py-1.5 rounded-md border border-slate-200 bg-white font-mono-tabular text-xs text-right text-slate-900 focus:outline-none focus:border-teal-600"
+                            className="w-full pl-2.5 pr-6 py-1.5 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-mono-tabular text-xs text-right text-slate-900 dark:text-slate-100 focus:outline-none focus:border-teal-600"
                           />
-                          <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-400 font-mono-tabular">
+                          <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-400 dark:text-slate-500 font-mono-tabular">
                             %
                           </span>
                         </div>
@@ -723,7 +745,7 @@ export function ExpenseModal({
           {error && (
             <div
               role="alert"
-              className="p-3 rounded-lg bg-red-50 border border-red-200 text-xs text-red-700"
+              className="p-3 rounded-lg bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-900 text-xs text-red-700 dark:text-red-300"
             >
               {error}
             </div>
@@ -733,7 +755,7 @@ export function ExpenseModal({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-sm font-medium rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 cursor-pointer"
+              className="px-4 py-2 text-sm font-medium rounded-lg border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer"
             >
               Cancel
             </button>
@@ -813,18 +835,18 @@ export function ProjectModal({ open, onClose, editingProject, onSubmit }: Projec
       role="dialog"
       aria-modal="true"
       aria-label={editingProject ? 'Edit Project' : 'Create Project'}
-      className="fixed inset-0 z-50 bg-slate-900/40 flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 bg-slate-900/40 dark:bg-black/60 flex items-center justify-center p-4"
     >
-      <div className="bg-white border border-slate-200 rounded-xl w-full max-w-md">
-        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
-          <h2 className="font-display text-base font-bold text-slate-900">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl w-full max-w-md">
+        <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+          <h2 className="font-display text-base font-bold text-slate-900 dark:text-slate-100">
             {editingProject ? 'Edit Project' : 'New Expense Project'}
           </h2>
           <button
             type="button"
             onClick={onClose}
             aria-label="Close modal"
-            className="p-2 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 cursor-pointer"
+            className="p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
@@ -832,7 +854,9 @@ export function ProjectModal({ open, onClose, editingProject, onSubmit }: Projec
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           <label className="space-y-1.5 block">
-            <span className="text-xs font-medium text-slate-700 block">Project Name</span>
+            <span className="text-xs font-medium text-slate-700 dark:text-slate-300 block">
+              Project Name
+            </span>
             <input
               type="text"
               required
@@ -840,12 +864,12 @@ export function ProjectModal({ open, onClose, editingProject, onSubmit }: Projec
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. Goa Trip, Home Expenses, Personal"
-              className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm text-slate-900 focus:outline-none focus:border-teal-600"
+              className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-teal-600"
             />
           </label>
 
           <label className="space-y-1.5 block">
-            <span className="text-xs font-medium text-slate-700 block">
+            <span className="text-xs font-medium text-slate-700 dark:text-slate-300 block">
               Description (optional)
             </span>
             <textarea
@@ -854,12 +878,12 @@ export function ProjectModal({ open, onClose, editingProject, onSubmit }: Projec
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Shared household bills and groceries"
-              className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm text-slate-900 focus:outline-none focus:border-teal-600 resize-none"
+              className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-teal-600 resize-none"
             />
           </label>
 
           <label className="space-y-1.5 block">
-            <span className="text-xs font-medium text-slate-700 block">
+            <span className="text-xs font-medium text-slate-700 dark:text-slate-300 block">
               Monthly Budget Limit in ₹ (optional)
             </span>
             <input
@@ -869,14 +893,14 @@ export function ProjectModal({ open, onClose, editingProject, onSubmit }: Projec
               value={monthlyBudget}
               onChange={(e) => setMonthlyBudget(e.target.value)}
               placeholder="e.g. 25000"
-              className="w-full px-3 py-2 rounded-lg border border-slate-200 font-mono-tabular text-sm text-slate-900 focus:outline-none focus:border-teal-600"
+              className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 font-mono-tabular text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-teal-600"
             />
           </label>
 
           {error && (
             <div
               role="alert"
-              className="p-3 rounded-lg bg-red-50 border border-red-200 text-xs text-red-700"
+              className="p-3 rounded-lg bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-900 text-xs text-red-700 dark:text-red-300"
             >
               {error}
             </div>
@@ -886,7 +910,7 @@ export function ProjectModal({ open, onClose, editingProject, onSubmit }: Projec
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-sm font-medium rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 cursor-pointer"
+              className="px-4 py-2 text-sm font-medium rounded-lg border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer"
             >
               Cancel
             </button>
@@ -969,15 +993,15 @@ export function InviteModal({
       role="dialog"
       aria-modal="true"
       aria-label="Invite Collaborator"
-      className="fixed inset-0 z-50 bg-slate-900/40 flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 bg-slate-900/40 dark:bg-black/60 flex items-center justify-center p-4"
     >
-      <div className="bg-white border border-slate-200 rounded-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
-        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+        <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
           <div>
-            <h2 className="font-display text-base font-bold text-slate-900">
+            <h2 className="font-display text-base font-bold text-slate-900 dark:text-slate-100">
               Invite to {project.name}
             </h2>
-            <p className="text-xs text-slate-500 mt-0.5">
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
               Collaborators can view and add expenses in this project
             </p>
           </div>
@@ -985,7 +1009,7 @@ export function InviteModal({
             type="button"
             onClick={onClose}
             aria-label="Close modal"
-            className="p-2 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 cursor-pointer"
+            className="p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
@@ -994,7 +1018,7 @@ export function InviteModal({
         <div className="p-6 space-y-6">
           <form onSubmit={handleSubmit} className="space-y-3">
             <label className="space-y-1.5 block">
-              <span className="text-xs font-medium text-slate-700 block">
+              <span className="text-xs font-medium text-slate-700 dark:text-slate-300 block">
                 Collaborator Gmail / Email
               </span>
               <div className="flex gap-2">
@@ -1004,7 +1028,7 @@ export function InviteModal({
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="friend@gmail.com"
-                  className="flex-1 px-3 py-2 rounded-lg border border-slate-200 text-sm text-slate-900 focus:outline-none focus:border-teal-600"
+                  className="flex-1 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-teal-600"
                 />
                 <button
                   type="submit"
@@ -1022,53 +1046,57 @@ export function InviteModal({
             </label>
 
             {statusMsg && (
-              <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-xs text-emerald-800">
+              <div className="p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-800 dark:text-emerald-300">
                 {statusMsg}
               </div>
             )}
             {error && (
               <div
                 role="alert"
-                className="p-3 rounded-lg bg-red-50 border border-red-200 text-xs text-red-700"
+                className="p-3 rounded-lg bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-900 text-xs text-red-700 dark:text-red-300"
               >
                 {error}
               </div>
             )}
           </form>
 
-          <div className="space-y-2.5 pt-2 border-t border-slate-200">
-            <h3 className="text-xs font-semibold text-slate-700">
+          <div className="space-y-2.5 pt-2 border-t border-slate-200 dark:border-slate-800">
+            <h3 className="text-xs font-semibold text-slate-700 dark:text-slate-300">
               Current Members ({members.length})
             </h3>
-            <div className="divide-y divide-slate-100">
+            <div className="divide-y divide-slate-100 dark:divide-slate-800">
               {members.map((m) => (
                 <div key={m.uid} className="py-2 flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2.5 min-w-0">
                     <UserAvatar name={m.displayName} photoURL={m.photoURL} size="sm" />
-                    <span className="text-sm font-medium text-slate-900 truncate">
+                    <span className="text-sm font-medium text-slate-900 dark:text-slate-100 truncate">
                       {m.displayName}
                     </span>
                   </div>
-                  <span className="text-xs text-slate-500 capitalize shrink-0">{m.role}</span>
+                  <span className="text-xs text-slate-500 dark:text-slate-400 capitalize shrink-0">
+                    {m.role}
+                  </span>
                 </div>
               ))}
             </div>
           </div>
 
           {pendingSent.length > 0 && (
-            <div className="space-y-2.5 pt-2 border-t border-slate-200">
-              <h3 className="text-xs font-semibold text-slate-700">
+            <div className="space-y-2.5 pt-2 border-t border-slate-200 dark:border-slate-800">
+              <h3 className="text-xs font-semibold text-slate-700 dark:text-slate-300">
                 Pending Invites ({pendingSent.length})
               </h3>
-              <div className="divide-y divide-slate-100">
+              <div className="divide-y divide-slate-100 dark:divide-slate-800">
                 {pendingSent.map((inv) => (
                   <div key={inv.id} className="py-2 flex items-center justify-between gap-3">
-                    <span className="text-xs text-slate-700 truncate">{inv.invitedEmail}</span>
+                    <span className="text-xs text-slate-700 dark:text-slate-300 truncate">
+                      {inv.invitedEmail}
+                    </span>
                     <button
                       type="button"
                       onClick={() => void onRevokeInvite(inv.id)}
                       aria-label={`Revoke invite to ${inv.invitedEmail}`}
-                      className="p-1.5 rounded text-slate-400 hover:text-red-700 hover:bg-red-50 cursor-pointer"
+                      className="p-1.5 rounded text-slate-400 hover:text-red-700 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/50 cursor-pointer"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
@@ -1131,16 +1159,18 @@ export function TagModal({ open, onClose, onSubmit }: TagModalProps) {
       role="dialog"
       aria-modal="true"
       aria-label="Create Custom Tag"
-      className="fixed inset-0 z-50 bg-slate-900/40 flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 bg-slate-900/40 dark:bg-black/60 flex items-center justify-center p-4"
     >
-      <div className="bg-white border border-slate-200 rounded-xl w-full max-w-md">
-        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
-          <h2 className="font-display text-base font-bold text-slate-900">Create Custom Tag</h2>
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl w-full max-w-md">
+        <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+          <h2 className="font-display text-base font-bold text-slate-900 dark:text-slate-100">
+            Create Custom Tag
+          </h2>
           <button
             type="button"
             onClick={onClose}
             aria-label="Close modal"
-            className="p-2 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 cursor-pointer"
+            className="p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
@@ -1148,7 +1178,9 @@ export function TagModal({ open, onClose, onSubmit }: TagModalProps) {
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           <label className="space-y-1.5 block">
-            <span className="text-xs font-medium text-slate-700 block">Tag Name</span>
+            <span className="text-xs font-medium text-slate-700 dark:text-slate-300 block">
+              Tag Name
+            </span>
             <input
               type="text"
               required
@@ -1156,18 +1188,18 @@ export function TagModal({ open, onClose, onSubmit }: TagModalProps) {
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. Gym, Rent, Pet Care"
-              className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm text-slate-900 focus:outline-none focus:border-teal-600"
+              className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-teal-600"
             />
           </label>
 
           <label className="space-y-1.5 block">
-            <span className="text-xs font-medium text-slate-700 block">
+            <span className="text-xs font-medium text-slate-700 dark:text-slate-300 block">
               Parent Category (optional)
             </span>
             <select
               value={parentCategory}
               onChange={(e) => setParentCategory(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm text-slate-900 bg-white focus:outline-none focus:border-teal-600"
+              className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-950 focus:outline-none focus:border-teal-600"
             >
               <option value="">None (Top-level Tag)</option>
               <option value="Bills">Bills (Sub-tag)</option>
@@ -1175,7 +1207,9 @@ export function TagModal({ open, onClose, onSubmit }: TagModalProps) {
           </label>
 
           <div className="space-y-2">
-            <span className="text-xs font-medium text-slate-700 block">Badge Color</span>
+            <span className="text-xs font-medium text-slate-700 dark:text-slate-300 block">
+              Badge Color
+            </span>
             <div className="flex flex-wrap gap-2">
               {TAG_COLOR_SWATCHES.map((swatch) => (
                 <button
@@ -1184,7 +1218,9 @@ export function TagModal({ open, onClose, onSubmit }: TagModalProps) {
                   onClick={() => setColor(swatch)}
                   aria-label={`Select color ${swatch}`}
                   className={`w-7 h-7 rounded-md transition-transform cursor-pointer ${
-                    color === swatch ? 'ring-2 ring-offset-2 ring-slate-900 scale-105' : ''
+                    color === swatch
+                      ? 'ring-2 ring-offset-2 ring-slate-900 dark:ring-slate-100 dark:ring-offset-slate-900 scale-105'
+                      : ''
                   }`}
                   style={{ backgroundColor: swatch }}
                 />
@@ -1195,7 +1231,7 @@ export function TagModal({ open, onClose, onSubmit }: TagModalProps) {
           {error && (
             <div
               role="alert"
-              className="p-3 rounded-lg bg-red-50 border border-red-200 text-xs text-red-700"
+              className="p-3 rounded-lg bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-900 text-xs text-red-700 dark:text-red-300"
             >
               {error}
             </div>
@@ -1205,7 +1241,7 @@ export function TagModal({ open, onClose, onSubmit }: TagModalProps) {
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-sm font-medium rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 cursor-pointer"
+              className="px-4 py-2 text-sm font-medium rounded-lg border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer"
             >
               Cancel
             </button>

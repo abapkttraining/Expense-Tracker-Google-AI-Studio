@@ -8,9 +8,9 @@ interface AuthGateProps {
 
 export function AuthGate({ onSignIn, signingIn, error }: AuthGateProps) {
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col">
-      <header className="h-16 px-6 lg:px-10 border-b border-slate-200 bg-white flex items-center justify-between">
-        <span className="font-display text-lg font-bold tracking-tight text-slate-900 whitespace-nowrap shrink-0">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col">
+      <header className="h-16 px-6 lg:px-10 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center justify-between">
+        <span className="font-display text-lg font-bold tracking-tight text-slate-900 dark:text-slate-100 whitespace-nowrap shrink-0">
           KhataLedger
         </span>
         <button
@@ -26,44 +26,44 @@ export function AuthGate({ onSignIn, signingIn, error }: AuthGateProps) {
       <main className="flex-1 max-w-6xl w-full mx-auto px-6 lg:px-10 py-12 lg:py-20 grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
         <div className="lg:col-span-7 space-y-8">
           <div className="space-y-4">
-            <p className="text-xs font-medium tracking-wide text-teal-700">
+            <p className="text-xs font-medium tracking-wide text-teal-700 dark:text-teal-400">
               Shared Household, Trip &amp; Personal Ledgers
             </p>
-            <h1 className="font-display text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-slate-900 leading-[1.12] [text-wrap:balance]">
+            <h1 className="font-display text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-slate-900 dark:text-slate-100 leading-[1.12] [text-wrap:balance]">
               Track every rupee across projects, UPI apps, and collaborators.
             </h1>
-            <p className="text-base text-slate-600 leading-relaxed max-w-xl">
+            <p className="text-base text-slate-600 dark:text-slate-400 leading-relaxed max-w-xl">
               Organize isolated expense workspaces for Home Expenses, Goa Trips, or Personal budgets.
               Invite members by Gmail, analyze PhonePe and GPay spending trends, and log expenses
               in plain English.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 pt-4 border-t border-slate-200">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 pt-4 border-t border-slate-200 dark:border-slate-800">
             <div className="space-y-1.5">
-              <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-                <Users className="w-4 h-4 text-teal-700 shrink-0" />
+              <div className="flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
+                <Users className="w-4 h-4 text-teal-700 dark:text-teal-400 shrink-0" />
                 <span>Shared Projects</span>
               </div>
-              <p className="text-xs text-slate-600 leading-relaxed">
+              <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
                 Invite collaborators by email with automatic linking when they sign in.
               </p>
             </div>
             <div className="space-y-1.5">
-              <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-                <BarChart3 className="w-4 h-4 text-teal-700 shrink-0" />
+              <div className="flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
+                <BarChart3 className="w-4 h-4 text-teal-700 dark:text-teal-400 shrink-0" />
                 <span>Live Analytics</span>
               </div>
-              <p className="text-xs text-slate-600 leading-relaxed">
+              <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
                 Daily, weekly, monthly, and yearly breakdowns by tag and UPI method.
               </p>
             </div>
             <div className="space-y-1.5">
-              <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-                <MessageSquareText className="w-4 h-4 text-teal-700 shrink-0" />
+              <div className="flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
+                <MessageSquareText className="w-4 h-4 text-teal-700 dark:text-teal-400 shrink-0" />
                 <span>AI Expense Entry</span>
               </div>
-              <p className="text-xs text-slate-600 leading-relaxed">
+              <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
                 Type &ldquo;650 PhonePe dinner with friends&rdquo; and confirm in one click.
               </p>
             </div>
@@ -71,31 +71,31 @@ export function AuthGate({ onSignIn, signingIn, error }: AuthGateProps) {
         </div>
 
         <div className="lg:col-span-5">
-          <div className="bg-white border border-slate-200 rounded-xl p-8 space-y-6">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-8 space-y-6">
             <div className="space-y-2">
-              <h2 className="font-display text-xl font-bold text-slate-900">
+              <h2 className="font-display text-xl font-bold text-slate-900 dark:text-slate-100">
                 Sign in to your workspace
               </h2>
-              <p className="text-sm text-slate-600">
+              <p className="text-sm text-slate-600 dark:text-slate-400">
                 Use your Google account to sync shared ledgers and pending project invitations.
               </p>
             </div>
 
-            <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 space-y-2.5">
-              <p className="text-xs font-medium text-slate-500">Natural-language entry preview</p>
-              <p className="text-sm text-slate-800 font-medium">
+            <div className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg p-4 space-y-2.5">
+              <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Natural-language entry preview</p>
+              <p className="text-sm text-slate-800 dark:text-slate-200 font-medium">
                 &ldquo;1200 GPay electricity bill and internet&rdquo;
               </p>
-              <div className="pt-2 border-t border-slate-200 flex items-center justify-between text-xs text-slate-600">
+              <div className="pt-2 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs text-slate-600 dark:text-slate-400">
                 <span>Google Pay (GPay) · Electricity · Internet</span>
-                <span className="font-mono-tabular font-semibold text-slate-900">₹1,200</span>
+                <span className="font-mono-tabular font-semibold text-slate-900 dark:text-slate-100">₹1,200</span>
               </div>
             </div>
 
             {error && (
               <div
                 role="alert"
-                className="p-3 rounded-lg bg-red-50 border border-red-200 text-xs text-red-700"
+                className="p-3 rounded-lg bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-900 text-xs text-red-700 dark:text-red-300"
               >
                 {error}
               </div>
@@ -105,7 +105,7 @@ export function AuthGate({ onSignIn, signingIn, error }: AuthGateProps) {
               type="button"
               onClick={onSignIn}
               disabled={signingIn}
-              className="w-full py-3 px-4 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold flex items-center justify-center gap-2.5 transition-colors disabled:opacity-60 cursor-pointer"
+              className="w-full py-3 px-4 rounded-lg bg-slate-900 dark:bg-teal-700 hover:bg-slate-800 dark:hover:bg-teal-600 text-white text-sm font-semibold flex items-center justify-center gap-2.5 transition-colors disabled:opacity-60 cursor-pointer"
             >
               <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
                 <path
@@ -129,8 +129,8 @@ export function AuthGate({ onSignIn, signingIn, error }: AuthGateProps) {
               <ArrowRight className="w-4 h-4" />
             </button>
 
-            <div className="flex items-center gap-2 text-xs text-slate-500">
-              <ShieldCheck className="w-4 h-4 text-teal-700 shrink-0" />
+            <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+              <ShieldCheck className="w-4 h-4 text-teal-700 dark:text-teal-400 shrink-0" />
               <span>Verified Google Identity &amp; isolated project permissions</span>
             </div>
           </div>
