@@ -9,6 +9,7 @@ import {
   X,
 } from 'lucide-react';
 import { formatINR } from '../constants';
+import { useCurrency } from '../hooks/useCurrency';
 import { parseExpenseWithAI, type AiExpenseImagePayload } from '../services/aiService';
 import { formatFrequencyLabel } from '../utils/recurringUtils';
 import {
@@ -134,6 +135,7 @@ export function AiExpenseDrawer({
   const [error, setError] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { currency, formatAmount } = useCurrency();
 
   if (!open) return null;
 
@@ -466,7 +468,7 @@ export function AiExpenseDrawer({
                         </span>
                         <span className="text-slate-400 dark:text-slate-500 mx-1.5">&middot;</span>
                         <span className="font-mono-tabular font-semibold text-slate-700 dark:text-slate-300">
-                          {formatINR(totalDraftAmount)}
+                          {formatAmount(totalDraftAmount)}
                         </span>
                       </div>
                       {unsavedCount > 0 ? (
@@ -515,8 +517,15 @@ export function AiExpenseDrawer({
                           </span>
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
-                          <span className="font-mono-tabular text-base font-bold text-slate-900 dark:text-slate-100">
-                            {formatINR(item.draft.amount)}
+                          <span
+                            title={
+                              currency !== 'INR'
+                                ? `Stored amount: ${formatINR(item.draft.amount)}`
+                                : undefined
+                            }
+                            className="font-mono-tabular text-base font-bold text-slate-900 dark:text-slate-100"
+                          >
+                            {formatAmount(item.draft.amount)}
                           </span>
                           {!item.saved && drafts.length > 1 && (
                             <button
@@ -720,7 +729,7 @@ export function AiExpenseDrawer({
                             </span>
                             {item.draft.splitMode === 'equal' && item.draft.amount > 0 && (
                               <span className="font-mono-tabular text-teal-700 dark:text-teal-400 font-semibold">
-                                {formatINR(item.draft.amount / members.length)}/ea
+                                {formatAmount(item.draft.amount / members.length)}/ea
                               </span>
                             )}
                           </label>

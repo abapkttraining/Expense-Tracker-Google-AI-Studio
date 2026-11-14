@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { Loader2, Trash2, UserPlus, X } from 'lucide-react';
+import { Loader2, SlidersHorizontal, Trash2, UserPlus, X } from 'lucide-react';
 import { formatINR, getTodayISO, TAG_COLOR_SWATCHES } from '../constants';
+import { useCurrency } from '../hooks/useCurrency';
 import { addFrequencyToDate, formatFrequencyLabel } from '../utils/recurringUtils';
 import {
   computeEqualSplitShares,
@@ -18,6 +19,7 @@ import {
   type SplitMode,
   type Tag,
 } from '../types';
+import { SplitSettingsModal, type SplitSettingsDraft } from './SplitSettingsModal';
 import { UserAvatar } from './UserAvatar';
 
 /* -------------------- Expense Modal -------------------- */
@@ -69,12 +71,15 @@ export function ExpenseModal({
   const [equalUids, setEqualUids] = useState<string[]>([]);
   const [exactInputs, setExactInputs] = useState<Record<string, string>>({});
   const [percentInputs, setPercentInputs] = useState<Record<string, string>>({});
+  const [splitSettingsOpen, setSplitSettingsOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { currency, inrPerUnit, formatAmount } = useCurrency();
 
   useEffect(() => {
     if (!open) return;
     setError(null);
+    setSplitSettingsOpen(false);
     const allMemberUids = members.map((m) => m.uid);
     if (editingExpense) {
       setAmount(String(editingExpense.amount));
@@ -204,16 +209,36 @@ export function ExpenseModal({
     if (nextMode === 'equal' && equalUids.length === 0) {
       setEqualUids(members.map((m) => m.uid));
     }
-    if (
-      nextMode === 'exact' &&
-      members.every((m) => !exactInputs[m.uid]) &&
-      numericAmount > 0
-    ) {
+    if (nextMode === 'exact') {
+      if (members.every((m) => !exactInputs[m.uid]) && numericAmount > 0) {
+        fillEqualValuesForMode('exact');
+      }
+      setSplitSettingsOpen(true);
+    }
+    if (nextMode === 'percentage') {
+      if (members.every((m) => !percentInputs[m.uid])) {
+        fillEqualValuesForMode('percentage');
+      }
+      setSplitSettingsOpen(true);
+    }
+  };
+
+  const handleOpenSplitSettings = () => {
+    if (splitMode === 'none' && members.length > 0 && members.every((m) => !exactInputs[m.uid]) && numericAmount > 0) {
       fillEqualValuesForMode('exact');
     }
-    if (nextMode === 'percentage' && members.every((m) => !percentInputs[m.uid])) {
-      fillEqualValuesForMode('percentage');
+    setSplitSettingsOpen(true);
+  };
+
+  const handleApplySplitSettings = (draft: SplitSettingsDraft) => {
+    setSplitMode(draft.splitMode);
+    setEqualUids(draft.equalUids);
+    setExactInputs(draft.exactInputs);
+    setPercentInputs(draft.percentInputs);
+    if (typeof draft.updatedExpenseAmount === 'number' && draft.updatedExpenseAmount > 0) {
+      setAmount(String(draft.updatedExpenseAmount));
     }
+    setError(null);
   };
 
   const handleSubmit = async (e: FormEvent) => {
@@ -338,6 +363,11 @@ export function ExpenseModal({
                 placeholder="0.00"
                 className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 font-mono-tabular text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-teal-600"
               />
+              {currency !== 'INR' && numericAmount > 0 && (
+                <span className="text-[11px] font-mono-tabular text-slate-500 dark:text-slate-400 block">
+                  ≈ {formatAmount(numericAmount)} (1 {currency} = ₹{inrPerUnit[currency].toFixed(2)})
+                </span>
+              )}
             </label>
 
             <label className="space-y-1.5 block">
@@ -546,19 +576,18 @@ export function ExpenseModal({
                 </span>
                 <span className="text-[11px] text-slate-500 dark:text-slate-400 block">
                   {members.length > 1
-                    ? 'Track who owes whom across project collaborators'
+                    ? 'Equal or custom unequal splits across collaborators'
                     : 'Invite collaborators to split expenses'}
                 </span>
               </div>
-              {(splitMode === 'exact' || splitMode === 'percentage') && members.length > 1 && (
-                <button
-                  type="button"
-                  onClick={() => fillEqualValuesForMode(splitMode)}
-                  className="text-[11px] font-medium text-teal-700 dark:text-teal-400 hover:text-teal-800 dark:hover:text-teal-300 cursor-pointer shrink-0"
-                >
-                  Distribute evenly
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={handleOpenSplitSettings}
+                className="px-2.5 py-1.5 rounded-lg border border-teal-200 dark:border-teal-800 bg-teal-50 dark:bg-teal-950/60 text-teal-800 dark:text-teal-300 hover:bg-teal-100 dark:hover:bg-teal-900/60 text-xs font-semibold inline-flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap shrink-0"
+              >
+                <SlidersHorizontal className="w-3.5 h-3.5" />
+                <span>Split Settings</span>
+              </button>
             </div>
 
             <div className="grid grid-cols-4 gap-1.5 bg-slate-100 dark:bg-slate-800 p-1 rounded-lg">
@@ -636,10 +665,10 @@ export function ExpenseModal({
             )}
 
             {splitMode === 'exact' && (
-              <div className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg p-3 space-y-2">
+              <div className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg p-3 space-y-2.5">
                 <div className="flex items-center justify-between text-[11px]">
-                  <span className="text-slate-500 dark:text-slate-400">
-                    Enter exact ₹ share per member
+                  <span className="font-medium text-slate-600 dark:text-slate-400">
+                    Unequal Split · Custom Amounts
                   </span>
                   <span
                     className={`font-mono-tabular font-semibold ${
@@ -650,45 +679,48 @@ export function ExpenseModal({
                   >
                     {Math.abs(exactSum - numericAmount) <= 0.01 && numericAmount > 0
                       ? `Matched ${formatINR(numericAmount)}`
-                      : `Remaining: ${formatINR(numericAmount - exactSum)}`}
+                      : `Allocated ${formatINR(exactSum)} / ${formatINR(numericAmount)}`}
                   </span>
                 </div>
-                <div className="space-y-2">
-                  {members.map((m) => (
-                    <div key={m.uid} className="flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <UserAvatar name={m.displayName} photoURL={m.photoURL} size="xs" />
-                        <span className="text-xs font-medium text-slate-800 dark:text-slate-200 truncate">
-                          {m.displayName}
+                <div className="divide-y divide-slate-200/70 dark:divide-slate-800">
+                  {members.map((m) => {
+                    const val = Number(exactInputs[m.uid]) || 0;
+                    return (
+                      <div key={m.uid} className="py-1.5 flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <UserAvatar name={m.displayName} photoURL={m.photoURL} size="xs" />
+                          <span className="text-xs font-medium text-slate-800 dark:text-slate-200 truncate">
+                            {m.displayName}
+                          </span>
+                        </div>
+                        <span
+                          className={`font-mono-tabular text-xs font-medium shrink-0 ${
+                            val > 0
+                              ? 'text-slate-900 dark:text-slate-100'
+                              : 'text-slate-400 dark:text-slate-500'
+                          }`}
+                        >
+                          {formatINR(val)}
                         </span>
                       </div>
-                      <div className="relative w-32 shrink-0">
-                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-400 dark:text-slate-500 font-mono-tabular">
-                          ₹
-                        </span>
-                        <input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          value={exactInputs[m.uid] ?? ''}
-                          onChange={(e) =>
-                            setExactInputs((prev) => ({ ...prev, [m.uid]: e.target.value }))
-                          }
-                          placeholder="0.00"
-                          className="w-full pl-6 pr-2.5 py-1.5 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-mono-tabular text-xs text-right text-slate-900 dark:text-slate-100 focus:outline-none focus:border-teal-600"
-                        />
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
+                <button
+                  type="button"
+                  onClick={handleOpenSplitSettings}
+                  className="w-full py-1.5 px-3 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-medium text-teal-700 dark:text-teal-400 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer"
+                >
+                  Edit Custom Amounts in Split Settings
+                </button>
               </div>
             )}
 
             {splitMode === 'percentage' && (
-              <div className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg p-3 space-y-2">
+              <div className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg p-3 space-y-2.5">
                 <div className="flex items-center justify-between text-[11px]">
-                  <span className="text-slate-500 dark:text-slate-400">
-                    Enter percentage share (total 100%)
+                  <span className="font-medium text-slate-600 dark:text-slate-400">
+                    Unequal Split · Percentages
                   </span>
                   <span
                     className={`font-mono-tabular font-semibold ${
@@ -699,45 +731,41 @@ export function ExpenseModal({
                   >
                     {Math.abs(percentSum - 100) <= 0.01
                       ? '100% allocated'
-                      : `Allocated: ${percentSum.toFixed(1)}% (${(100 - percentSum).toFixed(1)}% left)`}
+                      : `Allocated: ${percentSum.toFixed(1)}%`}
                   </span>
                 </div>
-                <div className="space-y-2">
+                <div className="divide-y divide-slate-200/70 dark:divide-slate-800">
                   {members.map((m) => {
                     const pct = Number(percentInputs[m.uid]) || 0;
                     const rupeeShare = numericAmount > 0 ? (numericAmount * pct) / 100 : 0;
                     return (
-                      <div key={m.uid} className="flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <div key={m.uid} className="py-1.5 flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2 min-w-0">
                           <UserAvatar name={m.displayName} photoURL={m.photoURL} size="xs" />
                           <span className="text-xs font-medium text-slate-800 dark:text-slate-200 truncate">
                             {m.displayName}
                           </span>
                         </div>
-                        <span className="font-mono-tabular text-[11px] text-slate-500 dark:text-slate-400 shrink-0">
-                          {formatINR(rupeeShare)}
+                        <span
+                          className={`font-mono-tabular text-xs font-medium shrink-0 ${
+                            pct > 0
+                              ? 'text-slate-900 dark:text-slate-100'
+                              : 'text-slate-400 dark:text-slate-500'
+                          }`}
+                        >
+                          {pct}% · {formatINR(rupeeShare)}
                         </span>
-                        <div className="relative w-24 shrink-0">
-                          <input
-                            type="number"
-                            step="0.1"
-                            min="0"
-                            max="100"
-                            value={percentInputs[m.uid] ?? ''}
-                            onChange={(e) =>
-                              setPercentInputs((prev) => ({ ...prev, [m.uid]: e.target.value }))
-                            }
-                            placeholder="0"
-                            className="w-full pl-2.5 pr-6 py-1.5 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-mono-tabular text-xs text-right text-slate-900 dark:text-slate-100 focus:outline-none focus:border-teal-600"
-                          />
-                          <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-400 dark:text-slate-500 font-mono-tabular">
-                            %
-                          </span>
-                        </div>
                       </div>
                     );
                   })}
                 </div>
+                <button
+                  type="button"
+                  onClick={handleOpenSplitSettings}
+                  className="w-full py-1.5 px-3 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-medium text-teal-700 dark:text-teal-400 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer"
+                >
+                  Edit Percentages in Split Settings
+                </button>
               </div>
             )}
           </div>
@@ -770,6 +798,19 @@ export function ExpenseModal({
           </div>
         </form>
       </div>
+
+      <SplitSettingsModal
+        open={splitSettingsOpen}
+        onClose={() => setSplitSettingsOpen(false)}
+        expenseAmount={numericAmount}
+        paidByName={members.find((m) => m.uid === paidByUid)?.displayName ?? 'Member'}
+        members={members}
+        initialSplitMode={splitMode}
+        initialEqualUids={equalUids}
+        initialExactInputs={exactInputs}
+        initialPercentInputs={percentInputs}
+        onApply={handleApplySplitSettings}
+      />
     </div>
   );
 }
@@ -789,6 +830,7 @@ export function ProjectModal({ open, onClose, editingProject, onSubmit }: Projec
   const [monthlyBudget, setMonthlyBudget] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { currency, inrPerUnit, formatAmount } = useCurrency();
 
   useEffect(() => {
     if (!open) return;
@@ -895,6 +937,11 @@ export function ProjectModal({ open, onClose, editingProject, onSubmit }: Projec
               placeholder="e.g. 25000"
               className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 font-mono-tabular text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-teal-600"
             />
+            {currency !== 'INR' && Number(monthlyBudget) > 0 && (
+              <span className="text-[11px] font-mono-tabular text-slate-500 dark:text-slate-400 block">
+                ≈ {formatAmount(Number(monthlyBudget))} (1 {currency} = ₹{inrPerUnit[currency].toFixed(2)})
+              </span>
+            )}
           </label>
 
           {error && (

@@ -1,3 +1,4 @@
+import { formatINR } from '../constants';
 import type { Expense, ProjectMember, Settlement, SplitMode } from '../types';
 
 export interface MemberBalanceSummary {
@@ -116,7 +117,8 @@ export function isExpenseSplit(expense: Expense): boolean {
 
 export function formatSplitSummaryLabel(
   expense: Expense,
-  membersByUid?: Map<string, { displayName: string }>
+  membersByUid?: Map<string, { displayName: string }>,
+  formatAmount: (amountInINR: number) => string = formatINR
 ): string | null {
   if (!isExpenseSplit(expense)) return null;
   const shares = expense.splitShares!;
@@ -127,7 +129,7 @@ export function formatSplitSummaryLabel(
   const mode: SplitMode = expense.splitMode ?? 'equal';
   if (mode === 'equal') {
     const firstAmt = entries[0][1];
-    return `Split equally (${count} ${count === 1 ? 'person' : 'people'} · ₹${firstAmt.toLocaleString('en-IN', { maximumFractionDigits: 2 })}/ea)`;
+    return `Split equally (${count} ${count === 1 ? 'person' : 'people'} · ${formatAmount(firstAmt)}/ea)`;
   }
 
   if (mode === 'percentage' && expense.splitPercentages) {
@@ -146,7 +148,7 @@ export function formatSplitSummaryLabel(
     .slice(0, 3)
     .map(([uid, amt]) => {
       const name = membersByUid?.get(uid)?.displayName.split(' ')[0] ?? 'Member';
-      return `${name} ₹${amt.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+      return `${name} ${formatAmount(amt)}`;
     })
     .join(', ');
   return entries.length > 3 ? `Split (${parts}, +${entries.length - 3})` : `Split (${parts})`;

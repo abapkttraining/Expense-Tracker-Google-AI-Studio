@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Bell, CalendarClock, Check, ChevronDown, ChevronUp, Loader2, SkipForward } from 'lucide-react';
-import { formatINR } from '../constants';
+import { useCurrency } from '../hooks/useCurrency';
 import { formatFrequencyLabel, type RecurringBillAlert } from '../utils/recurringUtils';
 import type { Expense } from '../types';
 
@@ -32,6 +32,7 @@ export function RecurringAlertsBanner({
 }: RecurringAlertsBannerProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const { formatAmount } = useCurrency();
 
   if (alerts.length === 0) return null;
 
@@ -119,7 +120,7 @@ export function RecurringAlertsBanner({
 
                 <div className="flex items-center gap-3 shrink-0 flex-wrap">
                   <span className="font-mono-tabular text-sm font-bold text-slate-900 dark:text-slate-100 mr-1">
-                    {formatINR(alert.expense.amount)}
+                    {formatAmount(alert.expense.amount)}
                   </span>
 
                   <button

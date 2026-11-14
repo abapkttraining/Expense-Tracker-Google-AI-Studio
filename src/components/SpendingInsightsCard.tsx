@@ -8,7 +8,7 @@ import {
   TrendingDown,
   TrendingUp,
 } from 'lucide-react';
-import { formatINR } from '../constants';
+import { useCurrency } from '../hooks/useCurrency';
 import type { Expense, Tag } from '../types';
 import { analyzeSpendingInsights, type SpendingInsight } from '../utils/insightsUtils';
 
@@ -66,7 +66,11 @@ export function SpendingInsightsCard({
   onInspectExpense,
   onAddExpense,
 }: SpendingInsightsCardProps) {
-  const report = useMemo(() => analyzeSpendingInsights(expenses, tags), [expenses, tags]);
+  const { formatAmount } = useCurrency();
+  const report = useMemo(
+    () => analyzeSpendingInsights(expenses, tags, formatAmount),
+    [expenses, tags, formatAmount]
+  );
 
   return (
     <section
@@ -118,11 +122,11 @@ export function SpendingInsightsCard({
                 : `${report.currentMonthLabel} Spend`}
             </div>
             <div className="text-sm font-bold text-slate-900 dark:text-slate-100 mt-0.5">
-              {formatINR(report.currentMonthTotal)}
+              {formatAmount(report.currentMonthTotal)}
               {report.hasPreviousMonthData && (
                 <span className="text-xs font-normal text-slate-500 dark:text-slate-400">
                   {' '}
-                  / {formatINR(report.previousMonthTotal)}
+                  / {formatAmount(report.previousMonthTotal)}
                 </span>
               )}
             </div>

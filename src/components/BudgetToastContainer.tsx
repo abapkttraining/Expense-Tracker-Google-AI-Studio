@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { AlertCircle, AlertTriangle, TrendingUp, X } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
-import { formatINR } from '../constants';
+import { useCurrency } from '../hooks/useCurrency';
 import type { BudgetToastItem, BudgetToastSeverity } from '../utils/budgetUtils';
 
 interface BudgetToastContainerProps {
@@ -77,6 +77,7 @@ function SingleBudgetToast({
     return () => window.clearTimeout(timer);
   }, [toast.id, onDismiss]);
 
+  const { formatAmount } = useCurrency();
   const styles = SEVERITY_STYLES[toast.severity];
   const fillPct = Math.min(100, Math.max(0, toast.percentUsed));
 
@@ -120,7 +121,7 @@ function SingleBudgetToast({
         </div>
         <div className="flex items-center justify-between gap-2 text-[11px] font-mono-tabular text-slate-600 dark:text-slate-400">
           <span>
-            {formatINR(toast.newSpend)} / {formatINR(toast.budget)}
+            {formatAmount(toast.newSpend)} / {formatAmount(toast.budget)}
           </span>
           <div className="flex items-center gap-2.5">
             <span className="font-semibold text-slate-800 dark:text-slate-200">{toast.percentUsed}%</span>

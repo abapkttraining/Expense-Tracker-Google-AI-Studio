@@ -1,6 +1,7 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import { ArrowRight, CheckCircle2, HandCoins, Loader2, Plus, Trash2, X } from 'lucide-react';
-import { formatINR, getTodayISO } from '../constants';
+import { getTodayISO } from '../constants';
+import { useCurrency } from '../hooks/useCurrency';
 import { computeProjectBalances, type SimplifiedDebt } from '../utils/splitUtils';
 import {
   PAYMENT_METHODS,
@@ -43,6 +44,7 @@ export function SplitsBalancesView({
   onDeleteSettlement,
   onAddSplitExpense,
 }: SplitsBalancesViewProps) {
+  const { currency, inrPerUnit, formatAmount } = useCurrency();
   const report = useMemo(
     () => computeProjectBalances(expenses, settlements, members),
     [expenses, settlements, members]
@@ -145,7 +147,7 @@ export function SplitsBalancesView({
             Shared Split Volume
           </span>
           <div className="font-mono-tabular text-2xl font-bold text-slate-900 dark:text-slate-100">
-            {formatINR(report.totalSplitExpenseVolume)}
+            {formatAmount(report.totalSplitExpenseVolume)}
           </div>
           <span className="text-xs text-slate-500 dark:text-slate-400 font-mono-tabular block">
             {report.splitExpenseCount} split{' '}
@@ -158,7 +160,7 @@ export function SplitsBalancesView({
             Unsettled Balances
           </span>
           <div className="font-mono-tabular text-2xl font-bold text-slate-900 dark:text-slate-100">
-            {formatINR(report.totalUnsettledAmount)}
+            {formatAmount(report.totalUnsettledAmount)}
           </div>
           <span className="text-xs text-slate-500 dark:text-slate-400 block">
             {report.simplifiedDebts.length === 0
@@ -174,7 +176,7 @@ export function SplitsBalancesView({
             Recorded Settlements
           </span>
           <div className="font-mono-tabular text-2xl font-bold text-slate-900 dark:text-slate-100">
-            {formatINR(report.totalSettlementVolume)}
+            {formatAmount(report.totalSettlementVolume)}
           </div>
           <span className="text-xs text-slate-500 dark:text-slate-400 font-mono-tabular block">
             {settlements.length} {settlements.length === 1 ? 'repayment' : 'repayments'} logged
@@ -254,7 +256,7 @@ export function SplitsBalancesView({
                       </span>
                     </div>
                     <div className="font-mono-tabular text-sm font-bold text-teal-800 dark:text-teal-400">
-                      {formatINR(debt.amount)}
+                      {formatAmount(debt.amount)}
                     </div>
                   </div>
                   <button
@@ -306,23 +308,23 @@ export function SplitsBalancesView({
                         </div>
                       </td>
                       <td className="py-3 px-4 text-right font-mono-tabular text-xs text-slate-700 dark:text-slate-300 whitespace-nowrap">
-                        {formatINR(mb.sharedPaid)}
+                        {formatAmount(mb.sharedPaid)}
                       </td>
                       <td className="py-3 px-4 text-right font-mono-tabular text-xs text-slate-700 dark:text-slate-300 whitespace-nowrap">
-                        {formatINR(mb.sharedOwed)}
+                        {formatAmount(mb.sharedOwed)}
                       </td>
                       <td className="py-3 px-5 text-right font-mono-tabular text-xs font-semibold whitespace-nowrap">
                         {isPositive ? (
                           <span className="text-emerald-700 dark:text-emerald-400">
-                            Gets back {formatINR(mb.netBalance)}
+                            Gets back {formatAmount(mb.netBalance)}
                           </span>
                         ) : isNegative ? (
                           <span className="text-red-700 dark:text-red-400">
-                            Owes {formatINR(Math.abs(mb.netBalance))}
+                            Owes {formatAmount(Math.abs(mb.netBalance))}
                           </span>
                         ) : (
                           <span className="text-slate-500 dark:text-slate-400">
-                            Settled · ₹0.00
+                            Settled · {formatAmount(0)}
                           </span>
                         )}
                       </td>
@@ -386,7 +388,7 @@ export function SplitsBalancesView({
                       {s.paymentMethod}
                     </td>
                     <td className="py-3 px-4 text-right font-mono-tabular font-semibold text-emerald-700 dark:text-emerald-400 whitespace-nowrap">
-                      {formatINR(s.amount)}
+                      {formatAmount(s.amount)}
                     </td>
                     <td className="py-3 px-5 text-right whitespace-nowrap">
                       <button
@@ -486,6 +488,11 @@ export function SplitsBalancesView({
                     placeholder="0.00"
                     className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 font-mono-tabular text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-teal-600"
                   />
+                  {currency !== 'INR' && Number(amount) > 0 && (
+                    <span className="text-[11px] font-mono-tabular text-slate-500 dark:text-slate-400 block">
+                      ≈ {formatAmount(Number(amount))} (1 {currency} = ₹{inrPerUnit[currency].toFixed(2)})
+                    </span>
+                  )}
                 </label>
 
                 <label className="space-y-1.5 block">

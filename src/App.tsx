@@ -13,6 +13,7 @@ import {
   Moon,
   Pencil,
   Plus,
+  RefreshCw,
   Search,
   Sun,
   Tag as TagIcon,
@@ -77,6 +78,7 @@ import { AiExpenseDrawer } from './components/AiExpenseDrawer';
 import { AnalyticsCharts } from './components/AnalyticsCharts';
 import { AuthGate } from './components/AuthGate';
 import { BudgetToastContainer } from './components/BudgetToastContainer';
+import { CurrencyToggle } from './components/CurrencyToggle';
 import { ExpenseTable } from './components/ExpenseTable';
 import { ExpenseModal, InviteModal, ProjectModal, TagModal } from './components/Modals';
 import { MonthlyBudgetCard } from './components/MonthlyBudgetCard';
@@ -85,6 +87,7 @@ import { SpendingInsightsCard } from './components/SpendingInsightsCard';
 import { SplitsBalancesView } from './components/SplitsBalancesView';
 import { ThemeToggleButton } from './components/ThemeToggleButton';
 import { UserAvatar } from './components/UserAvatar';
+import { useCurrency } from './hooks/useCurrency';
 import { useTheme } from './hooks/useTheme';
 
 type ActiveView = 'overview' | 'ledger' | 'splits' | 'manage';
@@ -140,6 +143,18 @@ export default function App() {
   const [lastScheduleCheck, setLastScheduleCheck] = useState<Date>(() => new Date());
 
   const { theme, isDark, setTheme } = useTheme();
+  const {
+    currency,
+    rates,
+    inrPerUnit,
+    rateSnapshot,
+    loadingRates,
+    isFallbackRate,
+    setCurrency,
+    refreshRates,
+    convertAmount,
+    formatAmount,
+  } = useCurrency();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
 
@@ -474,10 +489,11 @@ export default function App() {
         newSpend: nextSpend,
         budget,
         threshold: crossed,
+        formatAmount,
       });
       setBudgetToasts((prev) => [...prev.slice(-2), toast]);
     },
-    []
+    [formatAmount]
   );
 
   const handleSaveExpense = async (data: {
@@ -651,11 +667,13 @@ export default function App() {
   const handleExportCsv = () => {
     if (!activeProject || filteredExpenses.length === 0) return;
     const tagMap = new Map(tags.map((t) => [t.id, t.name]));
+    const includeConvertedCol = currency !== 'INR';
     const rows = [
       [
         'Date',
         'Description',
         'Amount (INR)',
+        ...(includeConvertedCol ? [`Amount (${currency})`] : []),
         'Paid By',
         'Payment Method',
         'Tags',
@@ -668,6 +686,7 @@ export default function App() {
         e.date,
         `"${e.description.replace(/"/g, '""')}"`,
         String(e.amount),
+        ...(includeConvertedCol ? [String(convertAmount(e.amount))] : []),
         `"${e.paidByName.replace(/"/g, '""')}"`,
         `"${e.paymentMethod}"`,
         `"${e.tagIds.map((id) => tagMap.get(id) ?? id).join(', ')}"`,
@@ -697,6 +716,9 @@ export default function App() {
         expenses,
         tags,
         userName: user.displayName || user.email || 'Member',
+        currency,
+        rates,
+        inrPerUnit,
       });
     } catch (err) {
       setGlobalError(
@@ -1032,7 +1054,7 @@ export default function App() {
       {/* Main Content Area */}
       <div className="flex-1 min-w-0 flex flex-col">
         {/* Top Bar Contract (3 clean zones) */}
-        <header className="sticky top-0 z-20 h-16 px-4 sm:px-6 lg:px-8 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-8">
+        <header className="sticky top-0 z-20 h-16 px-4 sm:px-6 lg:px-8 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3 sm:gap-8">
           {/* Zone 1: Menu toggle (mobile) + Active Project Breadcrumb */}
           <div className="flex items-center gap-3 min-w-0">
             <button
@@ -1098,8 +1120,9 @@ export default function App() {
             </button>
           </nav>
 
-          {/* Zone 3: Theme Toggle + Primary Action */}
-          <div className="flex items-center gap-2.5 shrink-0">
+          {/* Zone 3: Currency Toggle + Theme Toggle + Primary Action */}
+          <div className="flex items-center gap-2 shrink-0">
+            <CurrencyToggle />
             <ThemeToggleButton />
             <button
               type="button"
@@ -1108,10 +1131,11 @@ export default function App() {
                 setEditingExpense(null);
                 setExpenseModalOpen(true);
               }}
-              className="px-4 py-2 text-xs sm:text-sm font-semibold rounded-lg bg-teal-700 hover:bg-teal-800 dark:bg-teal-600 dark:hover:bg-teal-500 text-white inline-flex items-center gap-1.5 transition-colors disabled:opacity-50 whitespace-nowrap shrink-0 cursor-pointer"
+              className="px-3.5 sm:px-4 py-2 text-xs sm:text-sm font-semibold rounded-lg bg-teal-700 hover:bg-teal-800 dark:bg-teal-600 dark:hover:bg-teal-500 text-white inline-flex items-center gap-1.5 transition-colors disabled:opacity-50 whitespace-nowrap shrink-0 cursor-pointer"
             >
               <Plus className="w-4 h-4" />
-              <span>Add Expense</span>
+              <span className="hidden sm:inline">Add Expense</span>
+              <span className="sm:hidden">Add</span>
             </button>
           </div>
         </header>
@@ -1213,6 +1237,53 @@ export default function App() {
                 </div>
               </div>
 
+              {/* Active Foreign Currency Exchange Rate Notice */}
+              {currency !== 'INR' && (
+                <div
+                  role="status"
+                  className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs"
+                >
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-slate-600 dark:text-slate-300">
+                    <span className="font-semibold text-teal-800 dark:text-teal-400">
+                      Display currency: {currency}
+                    </span>
+                    <span aria-hidden="true" className="text-slate-300 dark:text-slate-600">
+                      ·
+                    </span>
+                    <span className="font-mono-tabular font-medium text-slate-800 dark:text-slate-200">
+                      1 {currency} = ₹{inrPerUnit[currency].toFixed(2)}
+                    </span>
+                    <span aria-hidden="true" className="text-slate-300 dark:text-slate-600">
+                      ·
+                    </span>
+                    <span className="text-slate-500 dark:text-slate-400">
+                      {isFallbackRate ? 'Offline fallback rate' : rateSnapshot.source} (
+                      {rateSnapshot.date}) · Entries stored in INR
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <button
+                      type="button"
+                      disabled={loadingRates}
+                      onClick={() => void refreshRates()}
+                      className="text-xs font-medium text-slate-700 dark:text-slate-200 hover:text-teal-700 dark:hover:text-teal-400 inline-flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                    >
+                      <RefreshCw
+                        className={`w-3.5 h-3.5 ${loadingRates ? 'animate-spin' : ''}`}
+                      />
+                      <span>{loadingRates ? 'Updating...' : 'Refresh Rate'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCurrency('INR')}
+                      className="text-xs font-semibold text-teal-700 dark:text-teal-400 hover:underline cursor-pointer"
+                    >
+                      Reset to INR
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* Scheduled Recurring Bills Notification Banner */}
               <RecurringAlertsBanner
                 alerts={recurringAlerts}
@@ -1257,7 +1328,7 @@ export default function App() {
                     Total Spend {hasActiveFilters ? '(Filtered)' : ''}
                   </span>
                   <div className="font-mono-tabular text-2xl font-bold text-slate-900 dark:text-slate-100">
-                    {formatINR(metrics.totalSpend)}
+                    {formatAmount(metrics.totalSpend)}
                   </div>
                   <span className="text-xs text-slate-500 dark:text-slate-400 font-mono-tabular block">
                     {filteredExpenses.length}{' '}
@@ -1287,11 +1358,11 @@ export default function App() {
                     </button>
                   </div>
                   <div className="font-mono-tabular text-2xl font-bold text-slate-900 dark:text-slate-100">
-                    {formatINR(metrics.thisMonthSpend)}
+                    {formatAmount(metrics.thisMonthSpend)}
                   </div>
                   <span className="text-xs text-slate-500 dark:text-slate-400 font-mono-tabular block">
                     {activeProject.monthlyBudget
-                      ? `of ${formatINR(activeProject.monthlyBudget)} cap`
+                      ? `of ${formatAmount(activeProject.monthlyBudget)} cap`
                       : new Date().toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}
                   </span>
                 </div>
@@ -1304,7 +1375,7 @@ export default function App() {
                     {metrics.topTagName}
                   </div>
                   <span className="text-xs text-slate-500 dark:text-slate-400 font-mono-tabular block">
-                    {formatINR(metrics.topTagAmount)}
+                    {formatAmount(metrics.topTagAmount)}
                   </span>
                 </div>
 
@@ -1316,7 +1387,7 @@ export default function App() {
                     {metrics.topMethod}
                   </div>
                   <span className="text-xs text-slate-500 dark:text-slate-400 font-mono-tabular block">
-                    {formatINR(metrics.topMethodAmount)}
+                    {formatAmount(metrics.topMethodAmount)}
                   </span>
                 </div>
               </section>
@@ -1441,21 +1512,21 @@ export default function App() {
                           <span>
                             Your split balance:{' '}
                             <strong className="font-mono-tabular text-emerald-700 dark:text-emerald-400">
-                              You are owed {formatINR(currentUserNetBalance)}
+                              You are owed {formatAmount(currentUserNetBalance)}
                             </strong>
                           </span>
                         ) : currentUserNetBalance < -0.009 ? (
                           <span>
                             Your split balance:{' '}
                             <strong className="font-mono-tabular text-red-700 dark:text-red-400">
-                              You owe {formatINR(Math.abs(currentUserNetBalance))}
+                              You owe {formatAmount(Math.abs(currentUserNetBalance))}
                             </strong>
                           </span>
                         ) : (
                           <span>
                             Unsettled group balance:{' '}
                             <strong className="font-mono-tabular text-slate-900 dark:text-slate-100">
-                              {formatINR(balanceReport.totalUnsettledAmount)}
+                              {formatAmount(balanceReport.totalUnsettledAmount)}
                             </strong>
                           </span>
                         )}
@@ -1806,7 +1877,9 @@ export default function App() {
               <span className="font-semibold text-slate-900 dark:text-slate-100">
                 {confirmDeleteExpense.description || 'this expense'}
               </span>{' '}
-              ({formatINR(confirmDeleteExpense.amount)}) from {activeProject.name}?
+              ({formatAmount(confirmDeleteExpense.amount)}
+              {currency !== 'INR' ? ` / ${formatINR(confirmDeleteExpense.amount)}` : ''}) from{' '}
+              {activeProject.name}?
             </p>
             <div className="flex items-center justify-end gap-3">
               <button

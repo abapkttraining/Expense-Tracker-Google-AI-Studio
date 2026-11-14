@@ -107,6 +107,45 @@ async function startServer() {
     res.json({ ok: true });
   });
 
+  app.get('/api/exchange-rates', (req: Request, res: Response) => {
+    const requestedDate =
+      typeof req.query.date === 'string' && isValidIsoDate(req.query.date)
+        ? req.query.date
+        : new Date().toISOString().slice(0, 10);
+
+    // Deterministic daily seed from YYYY-MM-DD so rates remain stable all day and vary daily
+    let seed = 0;
+    for (let i = 0; i < requestedDate.length; i += 1) {
+      seed = (seed * 31 + requestedDate.charCodeAt(i)) % 1000003;
+    }
+
+    const usdOffset = ((seed % 121) - 60) * 0.01; // -0.60 to +0.60
+    const eurOffset = (((seed * 7) % 161) - 80) * 0.01; // -0.80 to +0.80
+
+    const inrPerUsd = Math.round((84.25 + usdOffset) * 100) / 100;
+    const inrPerEur = Math.round((91.15 + eurOffset) * 100) / 100;
+
+    const usdPerInr = Math.round((1 / inrPerUsd) * 1_000_000) / 1_000_000;
+    const eurPerInr = Math.round((1 / inrPerEur) * 1_000_000) / 1_000_000;
+
+    res.json({
+      base: 'INR',
+      date: requestedDate,
+      source: 'Mock Daily Exchange Rate API',
+      rates: {
+        INR: 1,
+        USD: usdPerInr,
+        EUR: eurPerInr,
+      },
+      inrPerUnit: {
+        INR: 1,
+        USD: inrPerUsd,
+        EUR: inrPerEur,
+      },
+      updatedAt: new Date().toISOString(),
+    });
+  });
+
   app.post(
     '/api/ai/parse-expense',
     requireAuth,

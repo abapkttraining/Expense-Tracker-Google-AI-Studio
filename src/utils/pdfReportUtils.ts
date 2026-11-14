@@ -1,6 +1,11 @@
 import { ArcElement, Chart, DoughnutController, type Plugin } from 'chart.js';
 import { jsPDF } from 'jspdf';
-import { getTodayISO } from '../constants';
+import {
+  convertFromINR,
+  getFallbackExchangeRates,
+  getTodayISO,
+  type DisplayCurrency,
+} from '../constants';
 import type { Expense, Project, Tag } from '../types';
 
 Chart.register(DoughnutController, ArcElement);
@@ -25,19 +30,36 @@ export interface MonthlyPdfParams {
   expenses: Expense[];
   tags: Tag[];
   userName: string;
+  currency?: DisplayCurrency;
+  rates?: Record<DisplayCurrency, number>;
+  inrPerUnit?: Record<DisplayCurrency, number>;
 }
 
-function formatPdfINR(amount: number): string {
-  const formatted = new Intl.NumberFormat('en-IN', {
-    minimumFractionDigits: amount % 1 === 0 ? 0 : 2,
+function formatPdfCurrency(
+  amountInINR: number,
+  currency: DisplayCurrency = 'INR',
+  rates?: Record<DisplayCurrency, number>
+): string {
+  if (currency === 'INR') {
+    const formatted = new Intl.NumberFormat('en-IN', {
+      minimumFractionDigits: amountInINR % 1 === 0 ? 0 : 2,
+      maximumFractionDigits: 2,
+    }).format(amountInINR);
+    return `INR ${formatted}`;
+  }
+  const activeRates = rates ?? getFallbackExchangeRates().rates;
+  const converted = convertFromINR(amountInINR, currency, activeRates);
+  const formatted = new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: converted === 0 ? 0 : 2,
     maximumFractionDigits: 2,
-  }).format(amount);
-  return `INR ${formatted}`;
+  }).format(converted);
+  return `${currency} ${formatted}`;
 }
 
 function sanitizePdfText(value: string): string {
   return value
     .replace(/₹/g, 'INR ')
+    .replace(/€/g, 'EUR ')
     .replace(/[\r\n\t]+/g, ' ')
     .replace(/[^\x20-\x7E\xA0-\xFF]/g, '')
     .trim();
@@ -55,7 +77,9 @@ function hexToRgb(hex: string): [number, number, number] {
 
 function renderMonthlyDoughnutDataUrl(
   tagBreakdown: TagBreakdownRow[],
-  totalSpend: number
+  totalSpend: number,
+  currency: DisplayCurrency,
+  rates?: Record<DisplayCurrency, number>
 ): string | null {
   if (tagBreakdown.length === 0 || typeof document === 'undefined') return null;
 
@@ -89,7 +113,7 @@ function renderMonthlyDoughnutDataUrl(
       c.fillText('MONTHLY TOTAL', cx, cy - 20);
       c.fillStyle = '#0F172A';
       c.font = '700 34px system-ui, -apple-system, sans-serif';
-      c.fillText(formatPdfINR(totalSpend), cx, cy + 16);
+      c.fillText(formatPdfCurrency(totalSpend, currency, rates), cx, cy + 16);
       c.restore();
     },
   };
@@ -133,7 +157,11 @@ export function downloadMonthlyExpensePdf({
   expenses,
   tags,
   userName,
+  currency = 'INR',
+  rates,
+  inrPerUnit,
 }: MonthlyPdfParams): void {
+  const fmt = (amtInINR: number) => formatPdfCurrency(amtInINR, currency, rates);
   const todayISO = getTodayISO();
   const monthPrefix = todayISO.slice(0, 7);
   const [yearNum, monthNum] = monthPrefix.split('-').map(Number);
@@ -219,7 +247,11 @@ export function downloadMonthlyExpensePdf({
   doc.setTextColor(203, 213, 225);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9.5);
-  doc.text(`Monthly Expense Summary Report  |  ${monthLabel}`, marginX + 5, 31.5);
+  const rateSuffix =
+    currency !== 'INR' && inrPerUnit?.[currency]
+      ? `  |  Display: ${currency} (1 ${currency} = INR ${inrPerUnit[currency].toFixed(2)})`
+      : '';
+  doc.text(`Monthly Expense Summary Report  |  ${monthLabel}${rateSuffix}`, marginX + 5, 31.5);
 
   doc.setTextColor(148, 163, 184);
   doc.setFontSize(8);
@@ -245,31 +277,31 @@ export function downloadMonthlyExpensePdf({
   const kpis = [
     {
       label: 'THIS MONTH SPEND',
-      value: formatPdfINR(totalSpend),
+      value: fmt(totalSpend),
       sub: `${monthExpenses.length} ${monthExpenses.length === 1 ? 'transaction' : 'transactions'}`,
     },
     {
       label: 'MONTHLY BUDGET',
-      value: hasBudget ? formatPdfINR(budgetCap) : 'No Limit',
+      value: hasBudget ? fmt(budgetCap) : 'No Limit',
       sub: hasBudget
         ? budgetRemaining >= 0
-          ? `${budgetPct}% used (${formatPdfINR(budgetRemaining)} left)`
-          : `${budgetPct}% used (Over by ${formatPdfINR(Math.abs(budgetRemaining))})`
+          ? `${budgetPct}% used (${fmt(budgetRemaining)} left)`
+          : `${budgetPct}% used (Over by ${fmt(Math.abs(budgetRemaining))})`
         : 'Cap not configured',
     },
     {
       label: 'TOP CATEGORY',
       value: tagBreakdown[0]?.name ?? 'None',
       sub: tagBreakdown[0]
-        ? `${formatPdfINR(tagBreakdown[0].amount)} (${tagBreakdown[0].percent}%)`
-        : 'INR 0',
+        ? `${fmt(tagBreakdown[0].amount)} (${tagBreakdown[0].percent}%)`
+        : `${currency} 0`,
     },
     {
       label: 'TOP METHOD',
       value: paymentBreakdown[0]?.method ?? 'None',
       sub: paymentBreakdown[0]
-        ? `${formatPdfINR(paymentBreakdown[0].amount)} (${paymentBreakdown[0].percent}%)`
-        : 'INR 0',
+        ? `${fmt(paymentBreakdown[0].amount)} (${paymentBreakdown[0].percent}%)`
+        : `${currency} 0`,
     },
   ];
 
@@ -311,7 +343,7 @@ export function downloadMonthlyExpensePdf({
   doc.text('Weighted allocation across categories for the current calendar month', marginX, y + 3);
   y += 7;
 
-  const doughnutUrl = renderMonthlyDoughnutDataUrl(tagBreakdown, totalSpend);
+  const doughnutUrl = renderMonthlyDoughnutDataUrl(tagBreakdown, totalSpend, currency, rates);
 
   if (!doughnutUrl || tagBreakdown.length === 0) {
     doc.setFillColor(248, 250, 252);
@@ -384,7 +416,7 @@ export function downloadMonthlyExpensePdf({
 
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(15, 23, 42);
-      doc.text(formatPdfINR(item.amount), listX + listWidth, ly, { align: 'right' });
+      doc.text(fmt(item.amount), listX + listWidth, ly, { align: 'right' });
 
       ly += 6.2;
     });
@@ -432,7 +464,7 @@ export function downloadMonthlyExpensePdf({
       doc.text(String(pm.count), marginX + 104, y + 4.5, { align: 'right' });
       doc.text(`${pm.percent}%`, marginX + 132, y + 4.5, { align: 'right' });
       doc.setFont('helvetica', 'bold');
-      doc.text(formatPdfINR(pm.amount), marginX + contentWidth - 3, y + 4.5, { align: 'right' });
+      doc.text(fmt(pm.amount), marginX + contentWidth - 3, y + 4.5, { align: 'right' });
       y += 6.5;
     });
 
@@ -523,7 +555,7 @@ export function downloadMonthlyExpensePdf({
 
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(15, 23, 42);
-      doc.text(formatPdfINR(exp.amount), marginX + contentWidth - 2.5, textY, { align: 'right' });
+      doc.text(fmt(exp.amount), marginX + contentWidth - 2.5, textY, { align: 'right' });
 
       y += rowHeight;
     });

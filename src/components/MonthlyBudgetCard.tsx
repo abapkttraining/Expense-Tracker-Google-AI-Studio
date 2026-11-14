@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { AlertCircle, AlertTriangle, CheckCircle2, Loader2, Pencil, Target } from 'lucide-react';
-import { formatINR } from '../constants';
+import { useCurrency } from '../hooks/useCurrency';
 import type { Project } from '../types';
 
 interface MonthlyBudgetCardProps {
@@ -18,6 +18,7 @@ export function MonthlyBudgetCard({
   const [budgetInput, setBudgetInput] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { currency, inrPerUnit, formatAmount } = useCurrency();
 
   useEffect(() => {
     setEditing(false);
@@ -144,6 +145,12 @@ export function MonthlyBudgetCard({
             </button>
           </div>
 
+          {currency !== 'INR' && Number(budgetInput) > 0 && (
+            <p className="text-[11px] font-mono-tabular text-slate-500 dark:text-slate-400">
+              ≈ {formatAmount(Number(budgetInput))} at 1 {currency} = ₹{inrPerUnit[currency].toFixed(2)}
+            </p>
+          )}
+
           {error && (
             <div
               role="alert"
@@ -170,7 +177,7 @@ export function MonthlyBudgetCard({
               Monthly Budget Limit
             </h2>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Spent <span className="font-mono-tabular font-semibold text-slate-700 dark:text-slate-200">{formatINR(thisMonthSpend)}</span> in {monthLabel} · No spending cap configured yet
+              Spent <span className="font-mono-tabular font-semibold text-slate-700 dark:text-slate-200">{formatAmount(thisMonthSpend)}</span> in {monthLabel} · No spending cap configured yet
             </p>
           </div>
         </div>
@@ -277,21 +284,21 @@ export function MonthlyBudgetCard({
               <>
                 Exceeded monthly limit by{' '}
                 <span className="font-mono-tabular font-semibold text-red-700 dark:text-red-400">
-                  {formatINR(Math.abs(remaining))}
+                  {formatAmount(Math.abs(remaining))}
                 </span>
               </>
             ) : isCritical || isHigh || isApproaching ? (
               <>
                 Approaching cap —{' '}
                 <span className={`font-mono-tabular font-semibold ${statusTextColor}`}>
-                  {formatINR(remaining)}
+                  {formatAmount(remaining)}
                 </span>{' '}
                 remaining for {monthLabel}
               </>
             ) : (
               <>
                 <span className="font-mono-tabular font-semibold text-slate-800 dark:text-slate-200">
-                  {formatINR(remaining)}
+                  {formatAmount(remaining)}
                 </span>{' '}
                 remaining of your monthly cap
               </>
@@ -302,9 +309,9 @@ export function MonthlyBudgetCard({
         <div className="flex items-center gap-3 shrink-0">
           <div className="text-right font-mono-tabular">
             <div className="text-sm font-bold text-slate-900 dark:text-slate-100">
-              {formatINR(thisMonthSpend)}{' '}
+              {formatAmount(thisMonthSpend)}{' '}
               <span className="text-xs font-normal text-slate-500 dark:text-slate-400">
-                / {formatINR(budget)}
+                / {formatAmount(budget)}
               </span>
             </div>
             <div className={`text-xs font-semibold ${statusTextColor}`}>{percent}% used</div>

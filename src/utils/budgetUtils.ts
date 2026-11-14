@@ -1,3 +1,5 @@
+import { formatINR } from '../constants';
+
 export const BUDGET_THRESHOLDS = [50, 80, 90, 95, 100] as const;
 
 export type BudgetThreshold = (typeof BUDGET_THRESHOLDS)[number];
@@ -77,8 +79,17 @@ export function buildBudgetToast(params: {
   newSpend: number;
   budget: number;
   threshold: BudgetThreshold;
+  formatAmount?: (amountInINR: number) => string;
 }): BudgetToastItem {
-  const { projectId, projectName, previousSpend, newSpend, budget, threshold } = params;
+  const {
+    projectId,
+    projectName,
+    previousSpend,
+    newSpend,
+    budget,
+    threshold,
+    formatAmount = formatINR,
+  } = params;
   const percentUsed = Math.round((newSpend / budget) * 1000) / 10;
   const severity = getThresholdSeverity(threshold);
   const remaining = budget - newSpend;
@@ -89,20 +100,20 @@ export function buildBudgetToast(params: {
   if (threshold === 100) {
     if (remaining < 0) {
       title = '100%+ Monthly Budget Exceeded';
-      message = `${projectName} is now at ${percentUsed}% (${Math.abs(remaining).toLocaleString('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 })} over cap).`;
+      message = `${projectName} is now at ${percentUsed}% (${formatAmount(Math.abs(remaining))} over cap).`;
     } else {
       title = '100% Monthly Budget Reached';
       message = `${projectName} has reached its full monthly limit (${percentUsed}% used).`;
     }
   } else if (threshold === 95) {
     title = '95% Monthly Budget Critical';
-    message = `Only ${remaining.toLocaleString('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 })} remaining in ${projectName}'s monthly budget.`;
+    message = `Only ${formatAmount(remaining)} remaining in ${projectName}'s monthly budget.`;
   } else if (threshold === 90) {
     title = '90% Monthly Budget Reached';
-    message = `${projectName} reached ${percentUsed}% of its monthly cap (${remaining.toLocaleString('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 })} left).`;
+    message = `${projectName} reached ${percentUsed}% of its monthly cap (${formatAmount(remaining)} left).`;
   } else if (threshold === 80) {
     title = '80% Monthly Budget Reached';
-    message = `${projectName} is at ${percentUsed}% of its monthly limit with ${remaining.toLocaleString('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 })} left.`;
+    message = `${projectName} is at ${percentUsed}% of its monthly limit with ${formatAmount(remaining)} left.`;
   } else {
     title = '50% Monthly Budget Reached';
     message = `${projectName} passed the halfway mark (${percentUsed}% of monthly cap used).`;

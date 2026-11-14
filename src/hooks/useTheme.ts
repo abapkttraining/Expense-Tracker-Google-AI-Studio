@@ -1,9 +1,8 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useSyncExternalStore } from 'react';
 
 export type ThemeMode = 'light' | 'dark';
 
 const STORAGE_KEY = 'khata-theme';
-const THEME_EVENT = 'khata-theme-change';
 
 function getInitialTheme(): ThemeMode {
   if (typeof window === 'undefined') return 'light';
@@ -34,47 +33,68 @@ function applyThemeToDom(theme: ThemeMode) {
   }
 }
 
+let currentTheme: ThemeMode = getInitialTheme();
+const listeners = new Set<() => void>();
+
+function emitChange() {
+  for (const listener of listeners) {
+    listener();
+  }
+}
+
+function setThemeStore(next: ThemeMode) {
+  if (currentTheme === next) return;
+  currentTheme = next;
+  applyThemeToDom(next);
+  emitChange();
+}
+
+function subscribe(listener: () => void) {
+  listeners.add(listener);
+
+  const handleStorage = (event: StorageEvent) => {
+    if (event.key === STORAGE_KEY && (event.newValue === 'light' || event.newValue === 'dark')) {
+      if (currentTheme !== event.newValue) {
+        currentTheme = event.newValue;
+        applyThemeToDom(currentTheme);
+        emitChange();
+      }
+    }
+  };
+
+  if (typeof window !== 'undefined') {
+    window.addEventListener('storage', handleStorage);
+  }
+
+  return () => {
+    listeners.delete(listener);
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('storage', handleStorage);
+    }
+  };
+}
+
+function getSnapshot(): ThemeMode {
+  return currentTheme;
+}
+
+function getServerSnapshot(): ThemeMode {
+  return 'light';
+}
+
 export function useTheme() {
-  const [theme, setThemeState] = useState<ThemeMode>(getInitialTheme);
+  const theme = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
   useEffect(() => {
     applyThemeToDom(theme);
   }, [theme]);
 
-  useEffect(() => {
-    const handleCustomEvent = (event: Event) => {
-      const next = (event as CustomEvent<ThemeMode>).detail;
-      if (next === 'light' || next === 'dark') {
-        setThemeState(next);
-      }
-    };
-    const handleStorage = (event: StorageEvent) => {
-      if (event.key === STORAGE_KEY && (event.newValue === 'light' || event.newValue === 'dark')) {
-        setThemeState(event.newValue);
-      }
-    };
-
-    window.addEventListener(THEME_EVENT, handleCustomEvent);
-    window.addEventListener('storage', handleStorage);
-    return () => {
-      window.removeEventListener(THEME_EVENT, handleCustomEvent);
-      window.removeEventListener('storage', handleStorage);
-    };
-  }, []);
-
   const setTheme = useCallback((next: ThemeMode) => {
-    applyThemeToDom(next);
-    setThemeState(next);
-    window.dispatchEvent(new CustomEvent<ThemeMode>(THEME_EVENT, { detail: next }));
+    setThemeStore(next);
   }, []);
 
   const toggleTheme = useCallback(() => {
-    setThemeState((prev) => {
-      const next: ThemeMode = prev === 'dark' ? 'light' : 'dark';
-      applyThemeToDom(next);
-      window.dispatchEvent(new CustomEvent<ThemeMode>(THEME_EVENT, { detail: next }));
-      return next;
-    });
+    setThemeStore(currentTheme === 'dark' ? 'light' : 'dark');
   }, []);
 
   return {

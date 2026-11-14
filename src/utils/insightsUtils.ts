@@ -60,7 +60,8 @@ function computeTagTotals(expenses: Expense[]): Map<string, number> {
 
 export function analyzeSpendingInsights(
   expenses: Expense[],
-  tags: Tag[]
+  tags: Tag[],
+  formatAmount: (amountInINR: number) => string = formatINR
 ): SpendingInsightsReport {
   const todayISO = getTodayISO();
   const currentMonthPrefix = todayISO.slice(0, 7);
@@ -125,9 +126,9 @@ export function analyzeSpendingInsights(
             severity,
             kind: 'category-spike',
             title: `${tagName} spending up ${pctChange}% vs ${previousMonthLabel}`,
-            detail: `Spent ${formatINR(currAmt)} in ${currentMonthLabel} compared to ${formatINR(prevAmt)} in ${previousMonthLabel} (+${formatINR(delta)}).`,
+            detail: `Spent ${formatAmount(currAmt)} in ${currentMonthLabel} compared to ${formatAmount(prevAmt)} in ${previousMonthLabel} (+${formatAmount(delta)}).`,
             metricLabel: `+${pctChange}%`,
-            comparisonLabel: `${formatINR(prevAmt)} → ${formatINR(currAmt)}`,
+            comparisonLabel: `${formatAmount(prevAmt)} → ${formatAmount(currAmt)}`,
             tagId,
           },
         });
@@ -145,9 +146,9 @@ export function analyzeSpendingInsights(
               severity: pctChange >= 80 ? 'alert' : 'warning',
               kind: 'category-spike',
               title: `${tagName} is ${pctChange}% above your monthly average`,
-              detail: `${formatINR(currAmt)} spent this month vs ${formatINR(histAvg)} average across prior months (+${formatINR(delta)}).`,
+              detail: `${formatAmount(currAmt)} spent this month vs ${formatAmount(histAvg)} average across prior months (+${formatAmount(delta)}).`,
               metricLabel: `+${pctChange}%`,
-              comparisonLabel: `Avg ${formatINR(histAvg)} → ${formatINR(currAmt)}`,
+              comparisonLabel: `Avg ${formatAmount(histAvg)} → ${formatAmount(currAmt)}`,
               tagId,
             },
           });
@@ -160,9 +161,9 @@ export function analyzeSpendingInsights(
             severity: 'warning',
             kind: 'category-spike',
             title: `New ${tagName} spend detected in ${currentMonthLabel}`,
-            detail: `Logged ${formatINR(currAmt)} in ${tagName}, which had ₹0 spend in ${previousMonthLabel}.`,
-            metricLabel: formatINR(currAmt),
-            comparisonLabel: `₹0 in ${previousMonthLabel}`,
+            detail: `Logged ${formatAmount(currAmt)} in ${tagName}, which had ${formatAmount(0)} spend in ${previousMonthLabel}.`,
+            metricLabel: formatAmount(currAmt),
+            comparisonLabel: `${formatAmount(0)} in ${previousMonthLabel}`,
             tagId,
           },
         });
@@ -185,9 +186,9 @@ export function analyzeSpendingInsights(
         severity: overallPct >= 50 ? 'alert' : 'warning',
         kind: 'overall-surge',
         title: `Total spend is ${overallPct}% higher than ${previousMonthLabel}`,
-        detail: `${currentMonthLabel} total has reached ${formatINR(currentMonthTotal)} vs ${formatINR(previousMonthTotal)} last month (+${formatINR(overallDelta)}).`,
+        detail: `${currentMonthLabel} total has reached ${formatAmount(currentMonthTotal)} vs ${formatAmount(previousMonthTotal)} last month (+${formatAmount(overallDelta)}).`,
         metricLabel: `+${overallPct}%`,
-        comparisonLabel: `${formatINR(previousMonthTotal)} → ${formatINR(currentMonthTotal)}`,
+        comparisonLabel: `${formatAmount(previousMonthTotal)} → ${formatAmount(currentMonthTotal)}`,
       });
     } else if (overallPct <= -20 && Math.abs(overallDelta) >= 500) {
       insights.push({
@@ -195,9 +196,9 @@ export function analyzeSpendingInsights(
         severity: 'positive',
         kind: 'category-drop',
         title: `Total spend is ${Math.abs(overallPct)}% below ${previousMonthLabel}`,
-        detail: `So far in ${currentMonthLabel} you've spent ${formatINR(currentMonthTotal)} compared to ${formatINR(previousMonthTotal)} in ${previousMonthLabel}.`,
+        detail: `So far in ${currentMonthLabel} you've spent ${formatAmount(currentMonthTotal)} compared to ${formatAmount(previousMonthTotal)} in ${previousMonthLabel}.`,
         metricLabel: `${overallPct}%`,
-        comparisonLabel: `${formatINR(previousMonthTotal)} → ${formatINR(currentMonthTotal)}`,
+        comparisonLabel: `${formatAmount(previousMonthTotal)} → ${formatAmount(currentMonthTotal)}`,
       });
     }
   }
@@ -222,9 +223,9 @@ export function analyzeSpendingInsights(
         severity: multiplier >= 4 ? 'alert' : 'warning',
         kind: 'outlier-tx',
         title: `Unusually large ${primaryTag} expense (${multiplier}× typical)`,
-        detail: `"${txDesc}" (${formatINR(largestCurr.amount)} on ${largestCurr.date}) is ${multiplier}× your median transaction of ${formatINR(median)}.`,
+        detail: `"${txDesc}" (${formatAmount(largestCurr.amount)} on ${largestCurr.date}) is ${multiplier}× your median transaction of ${formatAmount(median)}.`,
         metricLabel: `${multiplier}×`,
-        comparisonLabel: `Median ${formatINR(median)}`,
+        comparisonLabel: `Median ${formatAmount(median)}`,
         expense: largestCurr,
       });
     }
@@ -249,9 +250,9 @@ export function analyzeSpendingInsights(
                 severity: 'positive',
                 kind: 'category-drop',
                 title: `${tagName} spending down ${dropPct}% vs ${previousMonthLabel}`,
-                detail: `Down from ${formatINR(prevAmt)} in ${previousMonthLabel} to ${formatINR(currAmt)} this month (-${formatINR(dropAmt)}).`,
+                detail: `Down from ${formatAmount(prevAmt)} in ${previousMonthLabel} to ${formatAmount(currAmt)} this month (-${formatAmount(dropAmt)}).`,
                 metricLabel: `-${dropPct}%`,
-                comparisonLabel: `${formatINR(prevAmt)} → ${formatINR(currAmt)}`,
+                comparisonLabel: `${formatAmount(prevAmt)} → ${formatAmount(currAmt)}`,
                 tagId,
               },
             };
@@ -275,9 +276,9 @@ export function analyzeSpendingInsights(
         severity: sharePct >= 80 ? 'warning' : 'neutral',
         kind: 'concentration',
         title: `${topTagName} drives ${sharePct}% of ${currentMonthLabel} spend`,
-        detail: `${formatINR(topTagAmount)} out of ${formatINR(currentMonthTotal)} this month is concentrated in ${topTagName}${!hasPreviousMonthData ? ` (no ${previousMonthLabel} baseline yet)` : ''}.`,
+        detail: `${formatAmount(topTagAmount)} out of ${formatAmount(currentMonthTotal)} this month is concentrated in ${topTagName}${!hasPreviousMonthData ? ` (no ${previousMonthLabel} baseline yet)` : ''}.`,
         metricLabel: `${sharePct}%`,
-        comparisonLabel: `${formatINR(topTagAmount)} / ${formatINR(currentMonthTotal)}`,
+        comparisonLabel: `${formatAmount(topTagAmount)} / ${formatAmount(currentMonthTotal)}`,
         tagId: topTagId,
       });
     }
@@ -293,11 +294,11 @@ export function analyzeSpendingInsights(
         ? `No spending anomalies detected vs ${previousMonthLabel}`
         : `Tracking ${currentMonthLabel} baseline (${currentMonthExpenses.length} ${currentMonthExpenses.length === 1 ? 'entry' : 'entries'})`,
       detail: hasPreviousMonthData
-        ? `All active categories in ${currentMonthLabel} (${formatINR(currentMonthTotal)}) are within normal range of ${previousMonthLabel} (${formatINR(previousMonthTotal)}).`
+        ? `All active categories in ${currentMonthLabel} (${formatAmount(currentMonthTotal)}) are within normal range of ${previousMonthLabel} (${formatAmount(previousMonthTotal)}).`
         : `Add or import expenses from ${previousMonthLabel} to unlock month-over-month category anomaly comparisons.`,
-      metricLabel: formatINR(currentMonthTotal),
+      metricLabel: formatAmount(currentMonthTotal),
       comparisonLabel: hasPreviousMonthData
-        ? `vs ${formatINR(previousMonthTotal)}`
+        ? `vs ${formatAmount(previousMonthTotal)}`
         : `${currentMonthExpenses.length} logged`,
     });
   } else if (insights.length === 0 && currentMonthExpenses.length === 0 && hasPreviousMonthData) {
@@ -306,9 +307,9 @@ export function analyzeSpendingInsights(
       severity: 'neutral',
       kind: 'baseline',
       title: `No expenses logged yet in ${currentMonthLabel}`,
-      detail: `${previousMonthLabel} closed at ${formatINR(previousMonthTotal)} across ${previousMonthExpenses.length} ${previousMonthExpenses.length === 1 ? 'transaction' : 'transactions'}. New entries this month will be compared automatically.`,
-      metricLabel: '₹0',
-      comparisonLabel: `${previousMonthLabel}: ${formatINR(previousMonthTotal)}`,
+      detail: `${previousMonthLabel} closed at ${formatAmount(previousMonthTotal)} across ${previousMonthExpenses.length} ${previousMonthExpenses.length === 1 ? 'transaction' : 'transactions'}. New entries this month will be compared automatically.`,
+      metricLabel: formatAmount(0),
+      comparisonLabel: `${previousMonthLabel}: ${formatAmount(previousMonthTotal)}`,
     });
   }
 

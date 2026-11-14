@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { Pencil, Plus, Trash2 } from 'lucide-react';
 import { formatINR } from '../constants';
+import { useCurrency } from '../hooks/useCurrency';
 import { computeNextDueDate, formatFrequencyLabel } from '../utils/recurringUtils';
 import { formatSplitSummaryLabel } from '../utils/splitUtils';
 import type { Expense, ProjectMember, Tag } from '../types';
@@ -29,6 +30,8 @@ export function ExpenseTable({
   hasActiveFilters,
   onClearFilters,
 }: ExpenseTableProps) {
+  const { currency, formatAmount } = useCurrency();
+
   const tagMap = useMemo(() => {
     const map = new Map<string, Tag>();
     for (const t of tags) map.set(t.id, t);
@@ -129,7 +132,7 @@ export function ExpenseTable({
               const resolvedTags = expense.tagIds
                 .map((id) => tagMap.get(id))
                 .filter((t): t is Tag => Boolean(t));
-              const splitLabel = formatSplitSummaryLabel(expense, memberMap);
+              const splitLabel = formatSplitSummaryLabel(expense, memberMap, formatAmount);
 
               return (
                 <tr
@@ -202,8 +205,16 @@ export function ExpenseTable({
                   <td className="py-3 px-4 text-xs font-medium text-slate-700 dark:text-slate-300 whitespace-nowrap">
                     {expense.paymentMethod}
                   </td>
-                  <td className="py-3 px-4 text-right font-mono-tabular font-semibold text-slate-900 dark:text-slate-100 whitespace-nowrap">
-                    {formatINR(expense.amount)}
+                  <td
+                    title={currency !== 'INR' ? `Base amount: ${formatINR(expense.amount)}` : undefined}
+                    className="py-3 px-4 text-right font-mono-tabular font-semibold text-slate-900 dark:text-slate-100 whitespace-nowrap"
+                  >
+                    <div>{formatAmount(expense.amount)}</div>
+                    {currency !== 'INR' && (
+                      <div className="text-[11px] font-normal text-slate-400 dark:text-slate-500">
+                        {formatINR(expense.amount)}
+                      </div>
+                    )}
                   </td>
                   <td className="py-3 px-5 text-right whitespace-nowrap">
                     <div className="inline-flex items-center justify-end gap-1">

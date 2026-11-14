@@ -14,7 +14,12 @@ import {
 } from 'chart.js';
 import { Bar, Doughnut, Line } from 'react-chartjs-2';
 import { PAYMENT_METHODS, type Expense, type Tag, type Timeframe } from '../types';
-import { formatINR, PAYMENT_METHOD_COLORS } from '../constants';
+import {
+  formatConvertedAmount,
+  getCurrencySymbol,
+  PAYMENT_METHOD_COLORS,
+} from '../constants';
+import { useCurrency } from '../hooks/useCurrency';
 
 ChartJS.register(
   CategoryScale,
@@ -73,6 +78,8 @@ export function AnalyticsCharts({
   isDark = false,
 }: AnalyticsChartsProps) {
   const [trendStyle, setTrendStyle] = useState<'bar' | 'line'>('bar');
+  const { currency, convertAmount, formatAmount } = useCurrency();
+  const currencySymbol = getCurrencySymbol(currency);
 
   const tagMap = useMemo(() => {
     const map = new Map<string, Tag>();
@@ -143,8 +150,8 @@ export function AnalyticsCharts({
       labels: trendSeries.labels,
       datasets: [
         {
-          label: 'Spend (₹)',
-          data: trendSeries.values,
+          label: `Spend (${currencySymbol})`,
+          data: trendSeries.values.map((v) => convertAmount(v)),
           backgroundColor: trendStyle === 'bar' ? '#0D9488' : 'rgba(13, 148, 136, 0.12)',
           borderColor: '#0F766E',
           borderWidth: trendStyle === 'line' ? 2 : 0,
@@ -156,7 +163,7 @@ export function AnalyticsCharts({
         },
       ],
     }),
-    [trendSeries, trendStyle]
+    [trendSeries, trendStyle, convertAmount, currencySymbol]
   );
 
   const gridColor = isDark ? '#1E293B' : '#F1F5F9';
@@ -170,7 +177,7 @@ export function AnalyticsCharts({
       legend: { display: false },
       tooltip: {
         callbacks: {
-          label: (ctx) => ` ${formatINR(Number(ctx.parsed.y ?? 0))}`,
+          label: (ctx) => ` ${formatConvertedAmount(Number(ctx.parsed.y ?? 0), currency)}`,
         },
       },
     },
@@ -185,7 +192,8 @@ export function AnalyticsCharts({
         ticks: {
           color: tickColor,
           font: { size: 11 },
-          callback: (val) => `₹${Number(val).toLocaleString('en-IN')}`,
+          callback: (val) =>
+            formatConvertedAmount(Number(val), currency, { compactAxis: true }),
         },
       },
     },
@@ -196,7 +204,7 @@ export function AnalyticsCharts({
       labels: tagBreakdown.map((t) => t.name),
       datasets: [
         {
-          data: tagBreakdown.map((t) => t.amount),
+          data: tagBreakdown.map((t) => convertAmount(t.amount)),
           backgroundColor: tagBreakdown.map((t) => t.color),
           borderColor: isDark ? '#0F172A' : '#FFFFFF',
           borderWidth: 2,
@@ -204,7 +212,7 @@ export function AnalyticsCharts({
         },
       ],
     }),
-    [tagBreakdown, isDark]
+    [tagBreakdown, isDark, convertAmount]
   );
 
   const doughnutOptions: ChartOptions<'doughnut'> = {
@@ -215,7 +223,8 @@ export function AnalyticsCharts({
       legend: { display: false },
       tooltip: {
         callbacks: {
-          label: (ctx) => ` ${ctx.label}: ${formatINR(Number(ctx.parsed ?? 0))}`,
+          label: (ctx) =>
+            ` ${ctx.label}: ${formatConvertedAmount(Number(ctx.parsed ?? 0), currency)}`,
         },
       },
     },
@@ -226,15 +235,15 @@ export function AnalyticsCharts({
       labels: paymentBreakdown.map((p) => p.method),
       datasets: [
         {
-          label: 'Spend (₹)',
-          data: paymentBreakdown.map((p) => p.amount),
+          label: `Spend (${currencySymbol})`,
+          data: paymentBreakdown.map((p) => convertAmount(p.amount)),
           backgroundColor: paymentBreakdown.map((p) => p.color),
           borderRadius: 5,
           barThickness: 18,
         },
       ],
     }),
-    [paymentBreakdown]
+    [paymentBreakdown, convertAmount, currencySymbol]
   );
 
   const paymentOptions: ChartOptions<'bar'> = {
@@ -245,7 +254,7 @@ export function AnalyticsCharts({
       legend: { display: false },
       tooltip: {
         callbacks: {
-          label: (ctx) => ` ${formatINR(Number(ctx.parsed.x ?? 0))}`,
+          label: (ctx) => ` ${formatConvertedAmount(Number(ctx.parsed.x ?? 0), currency)}`,
         },
       },
     },
@@ -256,7 +265,8 @@ export function AnalyticsCharts({
         ticks: {
           color: tickColor,
           font: { size: 11 },
-          callback: (val) => `₹${Number(val).toLocaleString('en-IN')}`,
+          callback: (val) =>
+            formatConvertedAmount(Number(val), currency, { compactAxis: true }),
         },
       },
       y: {
@@ -383,7 +393,7 @@ export function AnalyticsCharts({
                     <div className="flex items-center gap-2.5 shrink-0 font-mono-tabular">
                       <span className="text-slate-500 dark:text-slate-400">{item.percent}%</span>
                       <span className="font-semibold text-slate-900 dark:text-slate-100">
-                        {formatINR(item.amount)}
+                        {formatAmount(item.amount)}
                       </span>
                     </div>
                   </div>
