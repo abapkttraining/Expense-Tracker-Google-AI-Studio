@@ -127,6 +127,11 @@ export interface ParsedExpenseDraft {
   confidence: 'high' | 'medium' | 'low';
 }
 
+export interface ParsedExpenseBatchResponse {
+  assistantReply: string;
+  expenses: ParsedExpenseDraft[];
+}
+
 export interface ExpenseFilters {
   search: string;
   memberUid: string;

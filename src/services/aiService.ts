@@ -1,12 +1,17 @@
 import { auth } from '../lib/firebase';
 import { getTodayISO } from '../constants';
-import type { ParsedExpenseDraft, ProjectMember, Tag } from '../types';
+import type { ParsedExpenseBatchResponse, ProjectMember, Tag } from '../types';
+
+export interface AiExpenseImagePayload {
+  mimeType: string;
+  data: string; // raw base64 without data: prefix
+}
 
 export async function parseExpenseWithAI(
-  message: string,
+  input: { message?: string; image?: AiExpenseImagePayload },
   tags: Tag[],
   members: ProjectMember[]
-): Promise<ParsedExpenseDraft> {
+): Promise<ParsedExpenseBatchResponse> {
   const user = auth.currentUser;
   if (!user) {
     throw new Error('You must be signed in to use the AI expense assistant.');
@@ -20,7 +25,8 @@ export async function parseExpenseWithAI(
       Authorization: `Bearer ${idToken}`,
     },
     body: JSON.stringify({
-      message,
+      message: input.message ?? '',
+      image: input.image,
       todayDate: getTodayISO(),
       currentUserUid: user.uid,
       tags: tags.map((t) => ({
@@ -35,9 +41,9 @@ export async function parseExpenseWithAI(
     }),
   });
 
-  const payload = (await response.json()) as ParsedExpenseDraft & { error?: string };
+  const payload = (await response.json()) as ParsedExpenseBatchResponse & { error?: string };
   if (!response.ok) {
-    throw new Error(payload.error || 'Failed to parse expense message.');
+    throw new Error(payload.error || 'Failed to parse expense.');
   }
   return payload;
 }

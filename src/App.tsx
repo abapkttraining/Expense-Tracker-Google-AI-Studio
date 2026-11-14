@@ -598,6 +598,56 @@ export default function App() {
     );
   };
 
+  const handleAiConfirmSaveBatch = async (drafts: ParsedExpenseDraft[]) => {
+    if (!user || !activeProject || drafts.length === 0) return;
+    const currentMonthPrefix = getTodayISO().slice(0, 7);
+    const previousSpend = metrics.thisMonthSpend;
+    let addedMonthSpend = 0;
+
+    for (const draft of drafts) {
+      const payer = members.find((m) => m.uid === draft.paidByUid) ?? {
+        uid: user.uid,
+        displayName: user.displayName || user.email?.split('@')[0] || 'Member',
+        photoURL: user.photoURL ?? '',
+      };
+      const shouldSplitEqually = draft.splitMode === 'equal' && members.length > 1;
+      const splitShares = shouldSplitEqually
+        ? computeEqualSplitShares(
+            draft.amount,
+            members.map((m) => m.uid)
+          )
+        : undefined;
+
+      await createExpense(activeProject, user, {
+        amount: draft.amount,
+        date: draft.date,
+        description: draft.description,
+        paidByUid: payer.uid,
+        paidByName: payer.displayName,
+        paidByPhoto: payer.photoURL,
+        paymentMethod: draft.paymentMethod,
+        tagIds: draft.matchedTagIds,
+        source: 'ai_chat',
+        isRecurring: Boolean(draft.isRecurring),
+        frequency: draft.isRecurring ? draft.frequency ?? 'monthly' : undefined,
+        splitMode: shouldSplitEqually ? 'equal' : 'none',
+        splitShares,
+      });
+
+      if (draft.date.startsWith(currentMonthPrefix)) {
+        addedMonthSpend += draft.amount;
+      }
+    }
+
+    if (addedMonthSpend > 0) {
+      notifyBudgetThresholdIfCrossed(
+        activeProject,
+        previousSpend,
+        previousSpend + addedMonthSpend
+      );
+    }
+  };
+
   const handleExportCsv = () => {
     if (!activeProject || filteredExpenses.length === 0) return;
     const tagMap = new Map(tags.map((t) => [t.id, t.name]));
@@ -1674,6 +1724,7 @@ export default function App() {
           tags={tags}
           members={members}
           onConfirmSave={handleAiConfirmSave}
+          onConfirmSaveBatch={handleAiConfirmSaveBatch}
         />
       )}
 

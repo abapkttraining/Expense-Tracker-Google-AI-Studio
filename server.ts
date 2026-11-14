@@ -91,9 +91,17 @@ function isValidIsoDate(val: string | undefined): boolean {
   return typeof val === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(val);
 }
 
+const ALLOWED_IMAGE_MIME_TYPES = new Set([
+  'image/png',
+  'image/jpeg',
+  'image/jpg',
+  'image/webp',
+  'image/gif',
+]);
+
 async function startServer() {
   const app = express();
-  app.use(express.json({ limit: '1mb' }));
+  app.use(express.json({ limit: '12mb' }));
 
   app.get('/api/health', (_req: Request, res: Response) => {
     res.json({ ok: true });
@@ -112,16 +120,31 @@ async function startServer() {
           return;
         }
 
-        const { message, tags, members, todayDate, currentUserUid } = req.body as {
+        const { message, image, tags, members, todayDate, currentUserUid } = req.body as {
           message?: string;
+          image?: { mimeType?: string; data?: string };
           tags?: TagInput[];
           members?: MemberInput[];
           todayDate?: string;
           currentUserUid?: string;
         };
 
-        if (!message || typeof message !== 'string' || !message.trim()) {
-          res.status(400).json({ error: 'Please provide an expense description message.' });
+        const trimmedMessage = typeof message === 'string' ? message.trim() : '';
+        const rawImageData = typeof image?.data === 'string' ? image.data.trim() : '';
+        const rawMimeType = typeof image?.mimeType === 'string' ? image.mimeType.trim().toLowerCase() : '';
+        const hasImage = rawImageData.length > 0;
+
+        if (!trimmedMessage && !hasImage) {
+          res.status(400).json({
+            error: 'Please provide an expense message or attach a UPI screenshot.',
+          });
+          return;
+        }
+
+        if (hasImage && !ALLOWED_IMAGE_MIME_TYPES.has(rawMimeType)) {
+          res.status(400).json({
+            error: 'Unsupported image format. Please upload a PNG, JPEG, or WebP screenshot.',
+          });
           return;
         }
 
@@ -147,8 +170,8 @@ async function startServer() {
           .map((m) => `- uid: "${m.uid}", name: "${m.displayName}"`)
           .join('\n');
 
-        const systemInstruction = `You are a precision Indian personal & group finance expense parser.
-Convert the user's natural language message into a structured INR expense record.
+        const systemInstruction = `You are a precision Indian personal & group finance expense parser and OCR receipt/UPI-history reader.
+Convert the user's natural language message and/or attached screenshot (such as a PhonePe, Google Pay / GPay, Paytm, BHIM UPI, or bank transaction receipt or transaction history list) into one or more structured INR expense records.
 
 Context:
 - Today's date: ${safeToday}
@@ -160,18 +183,43 @@ ${tagListText || '- id: "other", name: "Other"'}
 ${memberListText || `- uid: "${fallbackUid}", name: "Current User"`}
 
 Rules:
-1. Extract numeric amount in INR (₹). If no numeric amount is found, set amount to 0.
-2. Pick the closest paymentMethod from the allowed list. Map "GPay", "Google Pay", or generic "UPI" to "Google Pay (GPay)" unless "PhonePe", "Paytm", or "BHIM" is named. Default to "PhonePe" if unspecified.
-3. Determine the expense date in YYYY-MM-DD format relative to ${safeToday} (e.g., "yesterday" -> 1 day before ${safeToday}; default to ${safeToday}).
-4. Match one or more tag IDs from the available project tags list (for example, "electricity bill and internet" should match both Electricity and Internet, or Bills). Only return tag IDs that exist in the provided list. If none match, return the "other" tag ID if available.
-5. Match paidByUid to a project member if the message names someone who paid; otherwise use "${fallbackUid}".
-6. Detect if this is a recurring bill or subscription (e.g. "monthly internet bill", "daily milk", "weekly gym", "annual subscription"). If recurring, set isRecurring to true and frequency to one of: "daily", "weekly", "monthly", "yearly". Otherwise set isRecurring to false and frequency to "".
-7. Detect if the user wants to split this expense equally among members (e.g., "split equally", "split with everyone", "split between us", "shared bill"). If so, set splitMode to "equal"; otherwise set splitMode to "none".
-8. Write a concise, natural description (max 120 chars) and a helpful 1-sentence assistantReply summarizing the parsed expense in ₹.`;
+1. If an image shows a UPI transaction history list with MULTIPLE transactions, extract EVERY visible completed outgoing expense / debit / payment row into the "expenses" array (do not skip valid rows). If it is a single transaction receipt or a single text message, return 1 item in "expenses". If a text message lists multiple expenses, extract all of them too.
+2. For transaction history screenshots:
+   - Extract outgoing payments ("Paid to", "Sent to", "Debited from", negative amounts, "Payment to", merchant names).
+   - Skip failed/cancelled transactions and skip incoming credits/money received ("Received from", "+ ₹...", "Credited") unless the user explicitly asks to include them.
+3. Extract numeric amount in INR (₹) for each item (positive number, without currency symbols or commas). If no numeric amount can be detected anywhere, return 1 item with amount 0.
+4. Pick the closest paymentMethod from the allowed list. Look at app branding, logos, UI colors, or text in screenshots (PhonePe purple/logo -> "PhonePe", Google Pay / GPay -> "Google Pay (GPay)", Paytm -> "Paytm", BHIM -> "BHIM UPI", card -> "Credit Card" or "Debit Card"). If generic UPI without app branding, use "Google Pay (GPay)" or "PhonePe". User text overrides screenshot detection if specified.
+5. Determine each expense date in YYYY-MM-DD format relative to ${safeToday}. Convert labels like "Today", "Yesterday", "14 Nov", "02 Nov 2026", "12/11/26" into YYYY-MM-DD (if year is omitted in a screenshot, infer the most recent date <= ${safeToday}; default to ${safeToday} if no date is visible).
+6. Match one or more tag IDs from the available project tags list based on the merchant/payee/category (e.g., Swiggy/Zomato/restaurant/Blinkit -> Food or Groceries; Uber/Ola/Rapido/Metro/Petrol -> Travel or Fuel; Jio/Airtel/Electricity/BESCOM/Broadband -> Bills / Phone Recharge / Electricity / Internet). Only return tag IDs that exist in the provided list. Fallback to the "other" tag ID if available.
+7. Match paidByUid to a project member if named in text or screenshot; otherwise use "${fallbackUid}".
+8. Detect recurring bills (e.g. monthly broadband, electricity, daily milk, weekly gym, subscriptions) -> set isRecurring true and frequency to "daily", "weekly", "monthly", or "yearly"; otherwise isRecurring false and frequency "".
+9. Detect equal split intent in the user's message (e.g. "split equally", "split with everyone", "shared") -> set splitMode to "equal"; otherwise "none".
+10. Write a concise, clean description per expense (merchant/payee name or purpose, max 120 chars, e.g. "Paid to Swiggy" or "BESCOM Electricity Bill").
+11. Write a helpful 1-sentence top-level assistantReply summarizing how many expenses were found and the total amount in ₹.`;
+
+        const promptText = trimmedMessage
+          ? hasImage
+            ? `Extract all expenses from the attached image. User note: ${trimmedMessage}`
+            : trimmedMessage
+          : 'Read this UPI transaction or transaction history screenshot and extract all outgoing expenses.';
+
+        const contents = hasImage
+          ? {
+              parts: [
+                {
+                  inlineData: {
+                    mimeType: rawMimeType === 'image/jpg' ? 'image/jpeg' : rawMimeType,
+                    data: rawImageData,
+                  },
+                },
+                { text: promptText },
+              ],
+            }
+          : promptText;
 
         const response = await ai.models.generateContent({
           model: 'gemini-4-hydrogen',
-          contents: message.trim(),
+          contents,
           config: {
             systemInstruction,
             thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
@@ -179,144 +227,173 @@ Rules:
             responseSchema: {
               type: Type.OBJECT,
               properties: {
-                amount: {
-                  type: Type.NUMBER,
-                  description: 'Parsed expense amount in INR. 0 if not detected.',
-                },
-                description: {
-                  type: Type.STRING,
-                  description: 'Clean, concise description of the expense.',
-                },
-                paymentMethod: {
-                  type: Type.STRING,
-                  description:
-                    'One of: PhonePe, Google Pay (GPay), BHIM UPI, Paytm, Debit Card, Credit Card, Cash.',
-                },
-                date: {
-                  type: Type.STRING,
-                  description: 'Expense date in YYYY-MM-DD format.',
-                },
-                matchedTagIds: {
-                  type: Type.ARRAY,
-                  items: { type: Type.STRING },
-                  description: 'Array of matching tag IDs from the provided project tags list.',
-                },
-                paidByUid: {
-                  type: Type.STRING,
-                  description: 'UID of the project member who paid.',
-                },
-                isRecurring: {
-                  type: Type.BOOLEAN,
-                  description: 'True if the user mentions a recurring bill or schedule.',
-                },
-                frequency: {
-                  type: Type.STRING,
-                  description:
-                    'Recurring schedule when isRecurring is true: daily, weekly, monthly, or yearly. Empty string otherwise.',
-                },
-                splitMode: {
-                  type: Type.STRING,
-                  description: 'Set to "equal" if user mentions splitting the expense; otherwise "none".',
-                },
                 assistantReply: {
                   type: Type.STRING,
-                  description: 'Friendly 1-sentence summary confirming what was extracted.',
+                  description:
+                    'Friendly 1-sentence summary stating how many expenses were extracted and total ₹.',
                 },
-                confidence: {
-                  type: Type.STRING,
-                  description: 'Confidence level: high, medium, or low.',
+                expenses: {
+                  type: Type.ARRAY,
+                  description: 'List of all extracted expenses from the text or screenshot.',
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      amount: {
+                        type: Type.NUMBER,
+                        description: 'Parsed expense amount in INR. 0 if not detected.',
+                      },
+                      description: {
+                        type: Type.STRING,
+                        description: 'Clean, concise merchant or expense description.',
+                      },
+                      paymentMethod: {
+                        type: Type.STRING,
+                        description:
+                          'One of: PhonePe, Google Pay (GPay), BHIM UPI, Paytm, Debit Card, Credit Card, Cash.',
+                      },
+                      date: {
+                        type: Type.STRING,
+                        description: 'Expense date in YYYY-MM-DD format.',
+                      },
+                      matchedTagIds: {
+                        type: Type.ARRAY,
+                        items: { type: Type.STRING },
+                        description: 'Array of matching tag IDs from the provided project tags list.',
+                      },
+                      paidByUid: {
+                        type: Type.STRING,
+                        description: 'UID of the project member who paid.',
+                      },
+                      isRecurring: {
+                        type: Type.BOOLEAN,
+                        description: 'True if recurring bill or subscription.',
+                      },
+                      frequency: {
+                        type: Type.STRING,
+                        description:
+                          'Recurring schedule when isRecurring is true: daily, weekly, monthly, or yearly. Empty string otherwise.',
+                      },
+                      splitMode: {
+                        type: Type.STRING,
+                        description:
+                          'Set to "equal" if user mentions splitting the expense; otherwise "none".',
+                      },
+                      confidence: {
+                        type: Type.STRING,
+                        description: 'Confidence level: high, medium, or low.',
+                      },
+                    },
+                    required: [
+                      'amount',
+                      'description',
+                      'paymentMethod',
+                      'date',
+                      'matchedTagIds',
+                      'paidByUid',
+                      'isRecurring',
+                      'frequency',
+                      'splitMode',
+                      'confidence',
+                    ],
+                  },
                 },
               },
-              required: [
-                'amount',
-                'description',
-                'paymentMethod',
-                'date',
-                'matchedTagIds',
-                'paidByUid',
-                'isRecurring',
-                'frequency',
-                'splitMode',
-                'assistantReply',
-                'confidence',
-              ],
+              required: ['assistantReply', 'expenses'],
             },
           },
         });
 
         const rawText = (response.text ?? '{}').trim();
         const parsed = JSON.parse(rawText) as {
-          amount?: number;
-          description?: string;
-          paymentMethod?: string;
-          date?: string;
-          matchedTagIds?: string[];
-          paidByUid?: string;
-          isRecurring?: boolean;
-          frequency?: string;
-          splitMode?: string;
           assistantReply?: string;
-          confidence?: string;
+          expenses?: Array<{
+            amount?: number;
+            description?: string;
+            paymentMethod?: string;
+            date?: string;
+            matchedTagIds?: string[];
+            paidByUid?: string;
+            isRecurring?: boolean;
+            frequency?: string;
+            splitMode?: string;
+            confidence?: string;
+          }>;
         };
 
         const validTagIdSet = new Set(safeTags.map((t) => t.id));
-        const filteredTags = (Array.isArray(parsed.matchedTagIds) ? parsed.matchedTagIds : []).filter(
-          (id) => validTagIdSet.has(id)
-        );
-        if (filteredTags.length === 0) {
-          const otherTag = safeTags.find((t) => t.name.toLowerCase() === 'other') ?? safeTags[0];
-          if (otherTag) filteredTags.push(otherTag.id);
-        }
-
         const validMemberSet = new Set(safeMembers.map((m) => m.uid));
-        const paidByUid =
-          parsed.paidByUid && validMemberSet.has(parsed.paidByUid)
-            ? parsed.paidByUid
-            : fallbackUid;
+        const rawExpenses = Array.isArray(parsed.expenses) && parsed.expenses.length > 0
+          ? parsed.expenses
+          : [{}];
 
-        const amount =
-          typeof parsed.amount === 'number' && Number.isFinite(parsed.amount) && parsed.amount > 0
-            ? Math.round(parsed.amount * 100) / 100
-            : 0;
+        const normalizedExpenses = rawExpenses.slice(0, 25).map((item) => {
+          const filteredTags = (Array.isArray(item.matchedTagIds) ? item.matchedTagIds : []).filter(
+            (id) => validTagIdSet.has(id)
+          );
+          if (filteredTags.length === 0) {
+            const otherTag = safeTags.find((t) => t.name.toLowerCase() === 'other') ?? safeTags[0];
+            if (otherTag) filteredTags.push(otherTag.id);
+          }
 
-        const confidence =
-          parsed.confidence === 'high' ||
-          parsed.confidence === 'medium' ||
-          parsed.confidence === 'low'
-            ? parsed.confidence
-            : amount > 0
-              ? 'high'
-              : 'low';
+          const paidByUid =
+            item.paidByUid && validMemberSet.has(item.paidByUid)
+              ? item.paidByUid
+              : fallbackUid;
 
-        const isRecurring = Boolean(parsed.isRecurring);
-        const normalizedFrequency =
-          parsed.frequency === 'daily' ||
-          parsed.frequency === 'weekly' ||
-          parsed.frequency === 'monthly' ||
-          parsed.frequency === 'yearly'
-            ? parsed.frequency
-            : isRecurring
-              ? 'monthly'
-              : undefined;
+          const amount =
+            typeof item.amount === 'number' && Number.isFinite(item.amount) && item.amount > 0
+              ? Math.round(item.amount * 100) / 100
+              : 0;
 
-        const splitMode = parsed.splitMode === 'equal' ? 'equal' : 'none';
+          const confidence =
+            item.confidence === 'high' ||
+            item.confidence === 'medium' ||
+            item.confidence === 'low'
+              ? item.confidence
+              : amount > 0
+                ? 'high'
+                : 'low';
+
+          const isRecurring = Boolean(item.isRecurring);
+          const normalizedFrequency =
+            item.frequency === 'daily' ||
+            item.frequency === 'weekly' ||
+            item.frequency === 'monthly' ||
+            item.frequency === 'yearly'
+              ? item.frequency
+              : isRecurring
+                ? 'monthly'
+                : undefined;
+
+          const splitMode = item.splitMode === 'equal' ? 'equal' : 'none';
+          const fallbackDesc = trimmedMessage || (hasImage ? 'UPI Transaction' : 'Expense');
+
+          return {
+            amount,
+            description: (item.description || fallbackDesc).slice(0, 200),
+            paymentMethod: normalizePaymentMethod(item.paymentMethod),
+            date: isValidIsoDate(item.date) ? item.date : safeToday,
+            matchedTagIds: filteredTags.slice(0, 10),
+            paidByUid,
+            isRecurring,
+            frequency: normalizedFrequency,
+            splitMode,
+            assistantReply: '',
+            confidence,
+          };
+        });
+
+        const totalExtracted = normalizedExpenses.reduce((sum, e) => sum + e.amount, 0);
+        const defaultReply =
+          totalExtracted > 0
+            ? normalizedExpenses.length > 1
+              ? `Found ${normalizedExpenses.length} expenses totaling ₹${totalExtracted.toLocaleString('en-IN')}. Review and save individually or click Save All.`
+              : `Extracted ₹${totalExtracted.toLocaleString('en-IN')} expense. Review and click Confirm & Save.`
+            : 'Could not detect clear expense amounts. Please review and enter the amount in ₹ before saving.';
 
         res.json({
-          amount,
-          description: (parsed.description || message.trim()).slice(0, 200),
-          paymentMethod: normalizePaymentMethod(parsed.paymentMethod),
-          date: isValidIsoDate(parsed.date) ? parsed.date : safeToday,
-          matchedTagIds: filteredTags.slice(0, 10),
-          paidByUid,
-          isRecurring,
-          frequency: normalizedFrequency,
-          splitMode,
-          assistantReply:
-            parsed.assistantReply ||
-            (amount > 0
-              ? 'Parsed your expense details. Review and click Confirm & Save.'
-              : 'Could not detect an amount. Please enter the amount in ₹ before saving.'),
-          confidence,
+          assistantReply: parsed.assistantReply || defaultReply,
+          expenses: normalizedExpenses,
         });
       } catch (error: unknown) {
         console.error('AI expense parse error:', error);
