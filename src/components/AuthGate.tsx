@@ -1,4 +1,5 @@
 import { ArrowRight, BarChart3, MessageSquareText, ShieldCheck, Users } from 'lucide-react';
+import { ThemeToggleButton } from './ThemeToggleButton';
 
 interface AuthGateProps {
   onSignIn: () => Promise<void>;
@@ -9,18 +10,21 @@ interface AuthGateProps {
 export function AuthGate({ onSignIn, signingIn, error }: AuthGateProps) {
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col">
-      <header className="h-16 px-6 lg:px-10 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center justify-between">
+      <header className="h-16 px-6 lg:px-10 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center justify-between gap-4">
         <span className="font-display text-lg font-bold tracking-tight text-slate-900 dark:text-slate-100 whitespace-nowrap shrink-0">
           KhataLedger
         </span>
-        <button
-          type="button"
-          onClick={onSignIn}
-          disabled={signingIn}
-          className="px-4 py-2 text-sm font-medium rounded-lg bg-teal-700 text-white hover:bg-teal-800 transition-colors disabled:opacity-60 cursor-pointer whitespace-nowrap shrink-0"
-        >
-          {signingIn ? 'Signing in...' : 'Sign in with Google'}
-        </button>
+        <div className="flex items-center gap-2.5 shrink-0">
+          <ThemeToggleButton />
+          <button
+            type="button"
+            onClick={onSignIn}
+            disabled={signingIn}
+            className="px-4 py-2 text-sm font-medium rounded-lg bg-teal-700 text-white hover:bg-teal-800 transition-colors disabled:opacity-60 cursor-pointer whitespace-nowrap shrink-0"
+          >
+            {signingIn ? 'Signing in...' : 'Sign in with Google'}
+          </button>
+        </div>
       </header>
 
       <main className="flex-1 max-w-6xl w-full mx-auto px-6 lg:px-10 py-12 lg:py-20 grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">

@@ -83,6 +83,7 @@ import { MonthlyBudgetCard } from './components/MonthlyBudgetCard';
 import { RecurringAlertsBanner } from './components/RecurringAlertsBanner';
 import { SpendingInsightsCard } from './components/SpendingInsightsCard';
 import { SplitsBalancesView } from './components/SplitsBalancesView';
+import { ThemeToggleButton } from './components/ThemeToggleButton';
 import { UserAvatar } from './components/UserAvatar';
 import { useTheme } from './hooks/useTheme';
 
@@ -1047,8 +1048,9 @@ export default function App() {
             </button>
           </nav>
 
-          {/* Zone 3: Primary Action */}
+          {/* Zone 3: Theme Toggle + Primary Action */}
           <div className="flex items-center gap-2.5 shrink-0">
+            <ThemeToggleButton />
             <button
               type="button"
               disabled={!activeProject}
