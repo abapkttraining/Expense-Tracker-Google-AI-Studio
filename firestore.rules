@@ -1,0 +1,402 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isProjectMember(projectId) {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/projects/$(projectId)/members/$(request.auth.uid));
+    }
+
+    function isProjectOwner(projectId) {
+      return isSignedIn() &&
+        get(/databases/$(database)/documents/projects/$(projectId)).data.ownerId == request.auth.uid;
+    }
+
+    function isValidUserProfile(data) {
+      return data.keys().hasAll(['uid', 'email', 'displayName', 'photoURL', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['uid', 'email', 'displayName', 'photoURL', 'createdAt', 'updatedAt']) &&
+        data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128 &&
+        data.email is string && data.email.size() >= 3 && data.email.size() <= 254 &&
+        data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 100 &&
+        data.photoURL is string && data.photoURL.size() <= 500 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidEmailIndex(data) {
+      return data.keys().hasAll(['uid', 'displayName', 'photoURL', 'updatedAt']) &&
+        data.keys().hasOnly(['uid', 'displayName', 'photoURL', 'updatedAt']) &&
+        data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128 &&
+        data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 100 &&
+        data.photoURL is string && data.photoURL.size() <= 500 &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidProject(data) {
+      return data.keys().hasAll(['name', 'description', 'ownerId', 'memberUids', 'currency', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['name', 'description', 'ownerId', 'memberUids', 'currency', 'monthlyBudget', 'createdAt', 'updatedAt']) &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 80 &&
+        data.description is string && data.description.size() <= 240 &&
+        data.ownerId is string && data.ownerId.size() >= 1 && data.ownerId.size() <= 128 &&
+        data.memberUids is list && data.memberUids.size() >= 1 && data.memberUids.size() <= 25 &&
+        data.memberUids[0] is string && data.memberUids[0].size() <= 128 &&
+        data.currency == 'INR' &&
+        (!('monthlyBudget' in data) || ((data.monthlyBudget is int || data.monthlyBudget is float) && data.monthlyBudget > 0 && data.monthlyBudget <= 1000000000)) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidProjectMember(data) {
+      return data.keys().hasAll(['uid', 'displayName', 'photoURL', 'role', 'projectMemberUids', 'joinedAt']) &&
+        data.keys().hasOnly(['uid', 'displayName', 'photoURL', 'role', 'inviteId', 'projectMemberUids', 'joinedAt']) &&
+        data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128 &&
+        data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 100 &&
+        data.photoURL is string && data.photoURL.size() <= 500 &&
+        (data.role == 'owner' || data.role == 'member') &&
+        (!('inviteId' in data) || (data.inviteId is string && data.inviteId.size() <= 128)) &&
+        data.projectMemberUids is list && data.projectMemberUids.size() >= 1 && data.projectMemberUids.size() <= 25 &&
+        data.projectMemberUids[0] is string && data.projectMemberUids[0].size() <= 128 &&
+        data.joinedAt is timestamp;
+    }
+
+    function isValidTag(data) {
+      return data.keys().hasAll(['name', 'color', 'parentCategory', 'isSystem', 'createdByUid', 'projectMemberUids', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['name', 'color', 'parentCategory', 'isSystem', 'createdByUid', 'projectMemberUids', 'createdAt', 'updatedAt']) &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 40 &&
+        data.color is string && data.color.size() == 7 && data.color.matches('^#[0-9a-fA-F]{6}$') &&
+        data.parentCategory is string && data.parentCategory.size() <= 40 &&
+        data.isSystem is bool &&
+        data.createdByUid is string && data.createdByUid.size() >= 1 && data.createdByUid.size() <= 128 &&
+        data.projectMemberUids is list && data.projectMemberUids.size() >= 1 && data.projectMemberUids.size() <= 25 &&
+        data.projectMemberUids[0] is string && data.projectMemberUids[0].size() <= 128 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidPaymentMethod(method) {
+      return method == 'PhonePe' ||
+        method == 'Google Pay (GPay)' ||
+        method == 'BHIM UPI' ||
+        method == 'Paytm' ||
+        method == 'Debit Card' ||
+        method == 'Credit Card' ||
+        method == 'Cash';
+    }
+
+    function isValidFrequency(freq) {
+      return freq == 'daily' ||
+        freq == 'weekly' ||
+        freq == 'monthly' ||
+        freq == 'yearly';
+    }
+
+    function isValidSplitMode(mode) {
+      return mode == 'none' ||
+        mode == 'equal' ||
+        mode == 'exact' ||
+        mode == 'percentage';
+    }
+
+    function isValidExpense(data) {
+      return data.keys().hasAll([
+          'amount', 'date', 'paidByUid', 'paidByName',
+          'paidByPhoto', 'paymentMethod', 'tagIds', 'createdByUid',
+          'projectMemberUids', 'source', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'amount', 'date', 'description', 'paidByUid', 'paidByName',
+          'paidByPhoto', 'paymentMethod', 'tagIds', 'createdByUid',
+          'projectMemberUids', 'source', 'isRecurring', 'frequency',
+          'nextDueDate', 'splitMode', 'splitShares', 'splitPercentages',
+          'createdAt', 'updatedAt'
+        ]) &&
+        (data.amount is int || data.amount is float) &&
+        data.amount > 0 && data.amount <= 100000000 &&
+        data.date is string && data.date.size() == 10 && data.date.matches('^\\d{4}-\\d{2}-\\d{2}$') &&
+        (!('description' in data) || (data.description is string && data.description.size() <= 200)) &&
+        data.paidByUid is string && data.paidByUid.size() >= 1 && data.paidByUid.size() <= 128 &&
+        data.paidByName is string && data.paidByName.size() >= 1 && data.paidByName.size() <= 100 &&
+        data.paidByPhoto is string && data.paidByPhoto.size() <= 500 &&
+        data.paymentMethod is string && data.paymentMethod.size() <= 40 && isValidPaymentMethod(data.paymentMethod) &&
+        data.tagIds is list && data.tagIds.size() >= 1 && data.tagIds.size() <= 10 &&
+        data.tagIds[0] is string && data.tagIds[0].size() <= 128 &&
+        data.createdByUid is string && data.createdByUid.size() >= 1 && data.createdByUid.size() <= 128 &&
+        data.projectMemberUids is list && data.projectMemberUids.size() >= 1 && data.projectMemberUids.size() <= 25 &&
+        data.projectMemberUids[0] is string && data.projectMemberUids[0].size() <= 128 &&
+        (data.source == 'manual' || data.source == 'ai_chat') &&
+        (!('isRecurring' in data) || data.isRecurring is bool) &&
+        (!('frequency' in data) || (data.frequency is string && data.frequency.size() <= 20 && isValidFrequency(data.frequency))) &&
+        (!('nextDueDate' in data) || (data.nextDueDate is string && data.nextDueDate.size() == 10 && data.nextDueDate.matches('^\\d{4}-\\d{2}-\\d{2}$'))) &&
+        (!('isRecurring' in data && data.isRecurring == true) || ('frequency' in data && isValidFrequency(data.frequency))) &&
+        (!('splitMode' in data) || (data.splitMode is string && data.splitMode.size() <= 20 && isValidSplitMode(data.splitMode))) &&
+        (!('splitShares' in data) || (data.splitShares is map && data.splitShares.size() >= 1 && data.splitShares.size() <= 25)) &&
+        (!('splitPercentages' in data) || (data.splitPercentages is map && data.splitPercentages.size() >= 1 && data.splitPercentages.size() <= 25)) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidSettlement(data) {
+      return data.keys().hasAll([
+          'fromUid', 'fromName', 'fromPhoto', 'toUid', 'toName', 'toPhoto',
+          'amount', 'date', 'paymentMethod', 'createdByUid',
+          'projectMemberUids', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'fromUid', 'fromName', 'fromPhoto', 'toUid', 'toName', 'toPhoto',
+          'amount', 'date', 'paymentMethod', 'note', 'createdByUid',
+          'projectMemberUids', 'createdAt', 'updatedAt'
+        ]) &&
+        data.fromUid is string && data.fromUid.size() >= 1 && data.fromUid.size() <= 128 &&
+        data.fromName is string && data.fromName.size() >= 1 && data.fromName.size() <= 100 &&
+        data.fromPhoto is string && data.fromPhoto.size() <= 500 &&
+        data.toUid is string && data.toUid.size() >= 1 && data.toUid.size() <= 128 &&
+        data.toName is string && data.toName.size() >= 1 && data.toName.size() <= 100 &&
+        data.toPhoto is string && data.toPhoto.size() <= 500 &&
+        data.fromUid != data.toUid &&
+        (data.amount is int || data.amount is float) &&
+        data.amount > 0 && data.amount <= 100000000 &&
+        data.date is string && data.date.size() == 10 && data.date.matches('^\\d{4}-\\d{2}-\\d{2}$') &&
+        data.paymentMethod is string && data.paymentMethod.size() <= 40 && isValidPaymentMethod(data.paymentMethod) &&
+        (!('note' in data) || (data.note is string && data.note.size() <= 200)) &&
+        data.createdByUid is string && data.createdByUid.size() >= 1 && data.createdByUid.size() <= 128 &&
+        data.projectMemberUids is list && data.projectMemberUids.size() >= 1 && data.projectMemberUids.size() <= 25 &&
+        data.projectMemberUids[0] is string && data.projectMemberUids[0].size() <= 128 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidInvite(data) {
+      return data.keys().hasAll(['projectId', 'projectName', 'invitedEmail', 'invitedByUid', 'invitedByName', 'status', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['projectId', 'projectName', 'invitedEmail', 'invitedByUid', 'invitedByName', 'status', 'acceptedByUid', 'createdAt', 'updatedAt']) &&
+        isValidId(data.projectId) &&
+        data.projectName is string && data.projectName.size() >= 1 && data.projectName.size() <= 80 &&
+        data.invitedEmail is string && data.invitedEmail.size() >= 3 && data.invitedEmail.size() <= 254 &&
+        data.invitedByUid is string && data.invitedByUid.size() >= 1 && data.invitedByUid.size() <= 128 &&
+        data.invitedByName is string && data.invitedByName.size() >= 1 && data.invitedByName.size() <= 100 &&
+        (data.status == 'pending' || data.status == 'accepted' || data.status == 'declined') &&
+        (!('acceptedByUid' in data) || (data.acceptedByUid is string && data.acceptedByUid.size() <= 128)) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    // Users collection: strict owner-only PII isolation
+    match /users/{userId} {
+      allow get: if isOwner(userId) && isValidId(userId);
+      allow list: if false;
+      allow create: if isVerifiedUser() && isOwner(userId) && isValidId(userId) &&
+        isValidUserProfile(incoming()) &&
+        incoming().uid == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser() && isOwner(userId) && isValidId(userId) &&
+        isValidUserProfile(incoming()) &&
+        incoming().uid == existing().uid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['email', 'displayName', 'photoURL', 'updatedAt']);
+      allow delete: if false;
+    }
+
+    // Hash-keyed user lookup (no PII stored, get-only)
+    match /userEmailIndex/{emailHash} {
+      allow get: if isSignedIn() && isValidId(emailHash);
+      allow list: if false;
+      allow create: if isVerifiedUser() && isValidId(emailHash) &&
+        isValidEmailIndex(incoming()) &&
+        incoming().uid == request.auth.uid &&
+        incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser() && isValidId(emailHash) &&
+        isValidEmailIndex(incoming()) &&
+        incoming().uid == request.auth.uid &&
+        existing().uid == request.auth.uid &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'updatedAt']);
+      allow delete: if false;
+    }
+
+    // Projects
+    match /projects/{projectId} {
+      allow list: if isSignedIn() && request.auth.uid in resource.data.memberUids;
+      allow get: if isSignedIn() && isValidId(projectId) && request.auth.uid in existing().memberUids;
+      allow create: if isVerifiedUser() && isValidId(projectId) &&
+        isValidProject(incoming()) &&
+        incoming().ownerId == request.auth.uid &&
+        incoming().memberUids.size() == 1 &&
+        incoming().memberUids[0] == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser() && isValidId(projectId) &&
+        isValidProject(incoming()) &&
+        incoming().ownerId == existing().ownerId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time && (
+          // Action: Edit project details or monthly budget
+          (request.auth.uid in existing().memberUids &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['name', 'description', 'monthlyBudget', 'updatedAt'])) ||
+          // Action: Owner adds or removes members
+          (existing().ownerId == request.auth.uid &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['memberUids', 'updatedAt'])) ||
+          // Action: Invited user joins themselves atomically
+          (!(request.auth.uid in existing().memberUids) &&
+            request.auth.uid in incoming().memberUids &&
+            incoming().memberUids.hasAll(existing().memberUids) &&
+            incoming().memberUids.size() == existing().memberUids.size() + 1 &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['memberUids', 'updatedAt']) &&
+            existsAfter(/databases/$(database)/documents/projects/$(projectId)/members/$(request.auth.uid)))
+        );
+      allow delete: if isVerifiedUser() && isValidId(projectId) && existing().ownerId == request.auth.uid;
+
+      match /members/{memberUid} {
+        allow list: if isSignedIn() && request.auth.uid in resource.data.projectMemberUids;
+        allow get: if isSignedIn() && isValidId(projectId) && isValidId(memberUid) && isProjectMember(projectId);
+        allow create: if isVerifiedUser() && isValidId(projectId) && isValidId(memberUid) &&
+          isValidProjectMember(incoming()) &&
+          incoming().uid == memberUid &&
+          incoming().joinedAt == request.time && (
+            // Creator bootstrapping self as owner
+            (memberUid == request.auth.uid &&
+              incoming().role == 'owner' &&
+              getAfter(/databases/$(database)/documents/projects/$(projectId)).data.ownerId == request.auth.uid) ||
+            // Project owner directly adding a known user
+            (isProjectOwner(projectId) && incoming().role == 'member') ||
+            // Invited user accepting a valid pending invite for their verified email
+            (memberUid == request.auth.uid &&
+              incoming().role == 'member' &&
+              'inviteId' in incoming() &&
+              isValidId(incoming().inviteId) &&
+              get(/databases/$(database)/documents/invites/$(incoming().inviteId)).data.invitedEmail == request.auth.token.email &&
+              get(/databases/$(database)/documents/invites/$(incoming().inviteId)).data.projectId == projectId &&
+              get(/databases/$(database)/documents/invites/$(incoming().inviteId)).data.status == 'pending')
+          );
+        allow update: if isVerifiedUser() && isValidId(projectId) && isValidId(memberUid) &&
+          isValidProjectMember(incoming()) &&
+          incoming().uid == existing().uid &&
+          incoming().role == existing().role &&
+          incoming().joinedAt == existing().joinedAt &&
+          isProjectMember(projectId) &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'projectMemberUids']);
+        allow delete: if isVerifiedUser() && isValidId(projectId) && isValidId(memberUid) &&
+          isProjectOwner(projectId) && memberUid != request.auth.uid;
+      }
+
+      match /tags/{tagId} {
+        allow list: if isSignedIn() && request.auth.uid in resource.data.projectMemberUids;
+        allow get: if isSignedIn() && isValidId(projectId) && isValidId(tagId) && isProjectMember(projectId);
+        allow create: if isVerifiedUser() && isValidId(projectId) && isValidId(tagId) &&
+          isValidTag(incoming()) &&
+          incoming().createdByUid == request.auth.uid &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time &&
+          isProjectMember(projectId);
+        allow update: if isVerifiedUser() && isValidId(projectId) && isValidId(tagId) &&
+          isValidTag(incoming()) &&
+          incoming().createdByUid == existing().createdByUid &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          isProjectMember(projectId) &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['name', 'color', 'parentCategory', 'projectMemberUids', 'updatedAt']);
+        allow delete: if isVerifiedUser() && isValidId(projectId) && isValidId(tagId) &&
+          isProjectMember(projectId) && existing().isSystem == false;
+      }
+
+      match /expenses/{expenseId} {
+        allow list: if isSignedIn() && request.auth.uid in resource.data.projectMemberUids;
+        allow get: if isSignedIn() && isValidId(projectId) && isValidId(expenseId) && isProjectMember(projectId);
+        allow create: if isVerifiedUser() && isValidId(projectId) && isValidId(expenseId) &&
+          isValidExpense(incoming()) &&
+          incoming().createdByUid == request.auth.uid &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time &&
+          isProjectMember(projectId);
+        allow update: if isVerifiedUser() && isValidId(projectId) && isValidId(expenseId) &&
+          isValidExpense(incoming()) &&
+          incoming().createdByUid == existing().createdByUid &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          isProjectMember(projectId) &&
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'amount', 'date', 'description', 'paidByUid', 'paidByName',
+            'paidByPhoto', 'paymentMethod', 'tagIds', 'projectMemberUids',
+            'isRecurring', 'frequency', 'nextDueDate', 'splitMode',
+            'splitShares', 'splitPercentages', 'updatedAt'
+          ]);
+        allow delete: if isVerifiedUser() && isValidId(projectId) && isValidId(expenseId) && isProjectMember(projectId);
+      }
+
+      match /settlements/{settlementId} {
+        allow list: if isSignedIn() && request.auth.uid in resource.data.projectMemberUids;
+        allow get: if isSignedIn() && isValidId(projectId) && isValidId(settlementId) && isProjectMember(projectId);
+        allow create: if isVerifiedUser() && isValidId(projectId) && isValidId(settlementId) &&
+          isValidSettlement(incoming()) &&
+          incoming().createdByUid == request.auth.uid &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time &&
+          isProjectMember(projectId);
+        allow update: if isVerifiedUser() && isValidId(projectId) && isValidId(settlementId) &&
+          isValidSettlement(incoming()) &&
+          incoming().createdByUid == existing().createdByUid &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          isProjectMember(projectId) &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['projectMemberUids', 'updatedAt']);
+        allow delete: if isVerifiedUser() && isValidId(projectId) && isValidId(settlementId) && isProjectMember(projectId);
+      }
+    }
+
+    // Invites collection
+    match /invites/{inviteId} {
+      allow list: if isVerifiedUser() &&
+        (resource.data.invitedEmail == request.auth.token.email || resource.data.invitedByUid == request.auth.uid);
+      allow get: if isVerifiedUser() && isValidId(inviteId) &&
+        (existing().invitedEmail == request.auth.token.email || existing().invitedByUid == request.auth.uid);
+      allow create: if isVerifiedUser() && isValidId(inviteId) &&
+        isValidInvite(incoming()) &&
+        incoming().invitedByUid == request.auth.uid &&
+        incoming().status == 'pending' &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        isProjectMember(incoming().projectId);
+      allow update: if isVerifiedUser() && isValidId(inviteId) &&
+        isValidInvite(incoming()) &&
+        existing().status == 'pending' &&
+        incoming().projectId == existing().projectId &&
+        incoming().invitedEmail == existing().invitedEmail &&
+        incoming().invitedByUid == existing().invitedByUid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        existing().invitedEmail == request.auth.token.email &&
+        (incoming().status == 'accepted' || incoming().status == 'declined') &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['status', 'acceptedByUid', 'updatedAt']);
+      allow delete: if isVerifiedUser() && isValidId(inviteId) &&
+        (existing().invitedByUid == request.auth.uid || existing().invitedEmail == request.auth.token.email);
+    }
+  }
+}

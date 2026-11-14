@@ -1,0 +1,6 @@
+{
+  "name": "KhataLedger",
+  "description": "Multi-user project expense tracker with Indian payment methods, custom tags, Chart.js analytics, and AI natural-language expense entry.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

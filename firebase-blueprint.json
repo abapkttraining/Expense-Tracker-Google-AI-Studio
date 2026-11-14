@@ -1,0 +1,210 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Private authenticated user profile storing email and display preferences.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "email": { "type": "string", "format": "email", "maxLength": 254 },
+        "displayName": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "photoURL": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "displayName", "photoURL", "createdAt", "updatedAt"]
+    },
+    "UserEmailIndex": {
+      "title": "UserEmailIndex",
+      "description": "SHA-256 email hash lookup mapping to user UID and public display name/avatar without exposing PII.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "displayName": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "photoURL": { "type": "string", "maxLength": 500 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "displayName", "photoURL", "updatedAt"]
+    },
+    "Project": {
+      "title": "Project",
+      "description": "Isolated expense ledger workspace shared among invited collaborators.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "description": { "type": "string", "maxLength": 240 },
+        "ownerId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "memberUids": { "type": "array", "description": "Bounded list of up to 25 collaborator UIDs." },
+        "currency": { "type": "string", "enum": ["INR"] },
+        "monthlyBudget": { "type": "number", "description": "Optional maximum monthly spending limit in INR." },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "description", "ownerId", "memberUids", "currency", "createdAt", "updatedAt"]
+    },
+    "ProjectMember": {
+      "title": "ProjectMember",
+      "description": "Member entry inside a project with role and profile info.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "displayName": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "photoURL": { "type": "string", "maxLength": 500 },
+        "role": { "type": "string", "enum": ["owner", "member"] },
+        "inviteId": { "type": "string", "maxLength": 128 },
+        "projectMemberUids": { "type": "array", "description": "Synced member UIDs for secure list queries." },
+        "joinedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "displayName", "photoURL", "role", "projectMemberUids", "joinedAt"]
+    },
+    "Tag": {
+      "title": "Tag",
+      "description": "System or custom expense tag scoped to a project.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "color": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+        "parentCategory": { "type": "string", "maxLength": 40 },
+        "isSystem": { "type": "boolean" },
+        "createdByUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "projectMemberUids": { "type": "array", "description": "Synced member UIDs for secure list queries." },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "color", "parentCategory", "isSystem", "createdByUid", "projectMemberUids", "createdAt", "updatedAt"]
+    },
+    "Expense": {
+      "title": "Expense",
+      "description": "Individual expense entry in INR with Indian payment method and multi-select tags.",
+      "type": "object",
+      "properties": {
+        "amount": { "type": "number" },
+        "date": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+        "description": { "type": "string", "maxLength": 200 },
+        "paidByUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "paidByName": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "paidByPhoto": { "type": "string", "maxLength": 500 },
+        "paymentMethod": {
+          "type": "string",
+          "enum": ["PhonePe", "Google Pay (GPay)", "BHIM UPI", "Paytm", "Debit Card", "Credit Card", "Cash"]
+        },
+        "tagIds": { "type": "array", "description": "1 to 10 tag document IDs." },
+        "createdByUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "projectMemberUids": { "type": "array", "description": "Synced member UIDs for secure list queries." },
+        "source": { "type": "string", "enum": ["manual", "ai_chat"] },
+        "isRecurring": { "type": "boolean" },
+        "frequency": { "type": "string", "enum": ["daily", "weekly", "monthly", "yearly"] },
+        "nextDueDate": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+        "splitMode": { "type": "string", "enum": ["none", "equal", "exact", "percentage"] },
+        "splitShares": { "type": "object", "description": "Map of member UID to INR share amount." },
+        "splitPercentages": { "type": "object", "description": "Map of member UID to percentage share (0-100)." },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "amount",
+        "date",
+        "paidByUid",
+        "paidByName",
+        "paidByPhoto",
+        "paymentMethod",
+        "tagIds",
+        "createdByUid",
+        "projectMemberUids",
+        "source",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Settlement": {
+      "title": "Settlement",
+      "description": "Recorded debt repayment between two project collaborators.",
+      "type": "object",
+      "properties": {
+        "fromUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "fromName": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "fromPhoto": { "type": "string", "maxLength": 500 },
+        "toUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "toName": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "toPhoto": { "type": "string", "maxLength": 500 },
+        "amount": { "type": "number" },
+        "date": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+        "paymentMethod": {
+          "type": "string",
+          "enum": ["PhonePe", "Google Pay (GPay)", "BHIM UPI", "Paytm", "Debit Card", "Credit Card", "Cash"]
+        },
+        "note": { "type": "string", "maxLength": 200 },
+        "createdByUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "projectMemberUids": { "type": "array", "description": "Synced member UIDs for secure list queries." },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "fromUid",
+        "fromName",
+        "fromPhoto",
+        "toUid",
+        "toName",
+        "toPhoto",
+        "amount",
+        "date",
+        "paymentMethod",
+        "createdByUid",
+        "projectMemberUids",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Invite": {
+      "title": "Invite",
+      "description": "Project collaboration invitation addressed by email.",
+      "type": "object",
+      "properties": {
+        "projectId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "projectName": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "invitedEmail": { "type": "string", "format": "email", "maxLength": 254 },
+        "invitedByUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "invitedByName": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "status": { "type": "string", "enum": ["pending", "accepted", "declined"] },
+        "acceptedByUid": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["projectId", "projectName", "invitedEmail", "invitedByUid", "invitedByName", "status", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Owner-only user profile document."
+    },
+    "/userEmailIndex/{emailHash}": {
+      "schema": { "$ref": "#/entities/UserEmailIndex" },
+      "description": "Hash-keyed user lookup for direct collaboration invites."
+    },
+    "/projects/{projectId}": {
+      "schema": { "$ref": "#/entities/Project" },
+      "description": "Expense projects shared among members."
+    },
+    "/projects/{projectId}/members/{memberUid}": {
+      "schema": { "$ref": "#/entities/ProjectMember" },
+      "description": "Authoritative project member records."
+    },
+    "/projects/{projectId}/tags/{tagId}": {
+      "schema": { "$ref": "#/entities/Tag" },
+      "description": "Default and custom project tags."
+    },
+    "/projects/{projectId}/expenses/{expenseId}": {
+      "schema": { "$ref": "#/entities/Expense" },
+      "description": "Project expenses."
+    },
+    "/projects/{projectId}/settlements/{settlementId}": {
+      "schema": { "$ref": "#/entities/Settlement" },
+      "description": "Recorded settlements between project members."
+    },
+    "/invites/{inviteId}": {
+      "schema": { "$ref": "#/entities/Invite" },
+      "description": "Pending and resolved email invitations."
+    }
+  }
+}
