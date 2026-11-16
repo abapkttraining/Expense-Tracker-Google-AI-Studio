@@ -14,7 +14,7 @@ export const RECURRING_FREQUENCIES = ['daily', 'weekly', 'monthly', 'yearly'] as
 
 export type RecurringFrequency = (typeof RECURRING_FREQUENCIES)[number];
 
-export const SPLIT_MODES = ['none', 'equal', 'exact', 'percentage'] as const;
+export const SPLIT_MODES = ['none', 'equal', 'exact', 'percentage', 'external'] as const;
 
 export type SplitMode = (typeof SPLIT_MODES)[number];
 
@@ -78,6 +78,24 @@ export interface Expense {
   splitMode?: SplitMode;
   splitShares?: Record<string, number>;
   splitPercentages?: Record<string, number>;
+  externalTotalPeople?: number;
+  externalIncludeSelf?: boolean;
+  externalLabel?: string;
+  createdAt?: unknown;
+  updatedAt?: unknown;
+}
+
+export interface ReceivedMoney {
+  id: string;
+  amount: number;
+  date: string; // YYYY-MM-DD
+  source: string;
+  note?: string;
+  paymentMethod: PaymentMethod;
+  linkedExpenseId?: string;
+  peoplePaidCount?: number;
+  createdByUid: string;
+  projectMemberUids: string[];
   createdAt?: unknown;
   updatedAt?: unknown;
 }
@@ -130,6 +148,16 @@ export interface ParsedExpenseDraft {
 export interface ParsedExpenseBatchResponse {
   assistantReply: string;
   expenses: ParsedExpenseDraft[];
+}
+
+export interface ProjectChatTurn {
+  role: 'user' | 'model';
+  text: string;
+}
+
+export interface ProjectChatResponse {
+  reply: string;
+  projectId: string;
 }
 
 export interface ExpenseFilters {

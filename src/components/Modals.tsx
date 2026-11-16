@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { Loader2, SlidersHorizontal, Trash2, UserPlus, X } from 'lucide-react';
+import { AlertTriangle, Loader2, SlidersHorizontal, Trash2, UserPlus, X } from 'lucide-react';
 import { formatINR, getTodayISO, TAG_COLOR_SWATCHES } from '../constants';
 import { useCurrency } from '../hooks/useCurrency';
+import { findDuplicateExpenses } from '../utils/duplicateUtils';
 import { addFrequencyToDate, formatFrequencyLabel } from '../utils/recurringUtils';
 import {
   computeEqualSplitShares,
@@ -28,7 +29,9 @@ interface ExpenseModalProps {
   open: boolean;
   onClose: () => void;
   editingExpense: Expense | null;
+  initialSplitMode?: SplitMode;
   project: Project;
+  existingExpenses: Expense[];
   members: ProjectMember[];
   tags: Tag[];
   currentUserUid: string;
@@ -45,6 +48,9 @@ interface ExpenseModalProps {
     splitMode: SplitMode;
     splitShares?: Record<string, number>;
     splitPercentages?: Record<string, number>;
+    externalTotalPeople?: number;
+    externalIncludeSelf?: boolean;
+    externalLabel?: string;
   }) => Promise<void>;
 }
 
@@ -52,7 +58,9 @@ export function ExpenseModal({
   open,
   onClose,
   editingExpense,
+  initialSplitMode,
   project,
+  existingExpenses,
   members,
   tags,
   currentUserUid,
@@ -71,14 +79,19 @@ export function ExpenseModal({
   const [equalUids, setEqualUids] = useState<string[]>([]);
   const [exactInputs, setExactInputs] = useState<Record<string, string>>({});
   const [percentInputs, setPercentInputs] = useState<Record<string, string>>({});
+  const [externalTotalPeople, setExternalTotalPeople] = useState('2');
+  const [externalIncludeSelf, setExternalIncludeSelf] = useState(true);
+  const [externalLabel, setExternalLabel] = useState('');
   const [splitSettingsOpen, setSplitSettingsOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [duplicateConfirmPending, setDuplicateConfirmPending] = useState(false);
   const { currency, inrPerUnit, formatAmount } = useCurrency();
 
   useEffect(() => {
     if (!open) return;
     setError(null);
+    setDuplicateConfirmPending(false);
     setSplitSettingsOpen(false);
     const allMemberUids = members.map((m) => m.uid);
     if (editingExpense) {
@@ -120,6 +133,10 @@ export function ExpenseModal({
       }
       setExactInputs(nextExact);
       setPercentInputs(nextPercent);
+      const extPeople = editingExpense.externalTotalPeople ?? 2;
+      setExternalTotalPeople(String(extPeople));
+      setExternalIncludeSelf(extPeople === 1 ? false : (editingExpense.externalIncludeSelf ?? true));
+      setExternalLabel(editingExpense.externalLabel ?? '');
     } else {
       const today = getTodayISO();
       setAmount('');
@@ -132,14 +149,29 @@ export function ExpenseModal({
       setNextDueDate(addFrequencyToDate(today, 'monthly'));
       const defaultTag = tags.find((t) => t.id === 'other') ?? tags[0];
       setSelectedTags(defaultTag ? [defaultTag.id] : []);
-      setSplitMode('none');
+      setSplitMode(initialSplitMode ?? 'none');
       setEqualUids(allMemberUids);
       setExactInputs({});
       setPercentInputs({});
+      setExternalTotalPeople('2');
+      setExternalIncludeSelf(true);
+      setExternalLabel('');
     }
-  }, [open, editingExpense, currentUserUid, tags, members]);
+  }, [open, editingExpense, initialSplitMode, currentUserUid, tags, members]);
 
   const numericAmount = Number(amount) || 0;
+  const parsedExternalPeople = Math.max(1, Math.min(50, Math.round(Number(externalTotalPeople) || 0)));
+  const effectiveExternalIncludeSelf = parsedExternalPeople === 1 ? false : externalIncludeSelf;
+  const externalOwedPeople = effectiveExternalIncludeSelf
+    ? Math.max(0, parsedExternalPeople - 1)
+    : parsedExternalPeople;
+  const externalPerPerson =
+    numericAmount > 0 && parsedExternalPeople > 0
+      ? Math.round((numericAmount / parsedExternalPeople) * 100) / 100
+      : 0;
+  const externalTotalReceivable = effectiveExternalIncludeSelf
+    ? Math.max(0, Math.round((numericAmount - externalPerPerson) * 100) / 100)
+    : Math.round(numericAmount * 100) / 100;
 
   const equalSharesPreview = useMemo(
     () => computeEqualSplitShares(numericAmount, equalUids),
@@ -163,6 +195,24 @@ export function ExpenseModal({
       }, 0),
     [members, percentInputs]
   );
+
+  const duplicateMatches = useMemo(
+    () =>
+      findDuplicateExpenses(
+        {
+          description,
+          date,
+          amount: numericAmount,
+        },
+        existingExpenses,
+        editingExpense?.id
+      ),
+    [description, date, numericAmount, existingExpenses, editingExpense?.id]
+  );
+
+  useEffect(() => {
+    setDuplicateConfirmPending(false);
+  }, [amount, date, description]);
 
   if (!open) return null;
 
@@ -254,6 +304,9 @@ export function ExpenseModal({
 
     let splitShares: Record<string, number> | undefined;
     let splitPercentages: Record<string, number> | undefined;
+    let extPeopleToSave: number | undefined;
+    let extIncludeSelfToSave: boolean | undefined;
+    let extLabelToSave: string | undefined;
 
     if (splitMode === 'equal') {
       if (equalUids.length === 0) {
@@ -290,6 +343,21 @@ export function ExpenseModal({
       }
       splitPercentages = pcts;
       splitShares = computePercentageSplitShares(numericAmount, pcts);
+    } else if (splitMode === 'external') {
+      const rawPeople = Number(externalTotalPeople);
+      if (!Number.isFinite(rawPeople) || rawPeople < 1 || rawPeople > 50) {
+        setError('Enter between 1 and 50 people for an external lending split.');
+        return;
+      }
+      extPeopleToSave = Math.round(rawPeople);
+      extIncludeSelfToSave = extPeopleToSave === 1 ? false : externalIncludeSelf;
+      extLabelToSave = externalLabel.trim() || undefined;
+    }
+
+    if (duplicateMatches.length > 0 && !duplicateConfirmPending) {
+      setDuplicateConfirmPending(true);
+      setError(null);
+      return;
     }
 
     setSaving(true);
@@ -308,6 +376,9 @@ export function ExpenseModal({
         splitMode,
         splitShares,
         splitPercentages,
+        externalTotalPeople: extPeopleToSave,
+        externalIncludeSelf: extIncludeSelfToSave,
+        externalLabel: extLabelToSave,
       });
       onClose();
     } catch (err) {
@@ -317,8 +388,26 @@ export function ExpenseModal({
     }
   };
 
-  const billSubTags = tags.filter((t) => t.parentCategory === 'Bills');
-  const generalTags = tags.filter((t) => t.parentCategory !== 'Bills');
+  const { topLevelTags, subTagGroups } = (() => {
+    const parentGroups = new Map<string, Tag[]>();
+    const topLevel: Tag[] = [];
+    for (const t of tags) {
+      const parent = t.parentCategory.trim();
+      if (!parent) {
+        topLevel.push(t);
+      } else {
+        const key = parent;
+        const list = parentGroups.get(key) ?? [];
+        list.push(t);
+        parentGroups.set(key, list);
+      }
+    }
+    const groups = Array.from(parentGroups.entries()).map(([parentName, children]) => ({
+      parentName,
+      children,
+    }));
+    return { topLevelTags: topLevel, subTagGroups: groups };
+  })();
 
   return (
     <div
@@ -450,13 +539,13 @@ export function ExpenseModal({
               </span>
             </div>
 
-            {billSubTags.length > 0 && (
-              <div className="space-y-1.5">
+            {subTagGroups.map((group) => (
+              <div key={group.parentName} className="space-y-1.5">
                 <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 block">
-                  Bills Sub-tags
+                  {group.parentName} Sub-tags
                 </span>
                 <div className="flex flex-wrap gap-1.5">
-                  {billSubTags.map((tag) => {
+                  {group.children.map((tag) => {
                     const active = selectedTags.includes(tag.id);
                     return (
                       <button
@@ -475,14 +564,14 @@ export function ExpenseModal({
                   })}
                 </div>
               </div>
-            )}
+            ))}
 
             <div className="space-y-1.5">
               <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 block">
                 Categories
               </span>
               <div className="flex flex-wrap gap-1.5">
-                {generalTags.map((tag) => {
+                {topLevelTags.map((tag) => {
                   const active = selectedTags.includes(tag.id);
                   return (
                     <button
@@ -590,13 +679,14 @@ export function ExpenseModal({
               </button>
             </div>
 
-            <div className="grid grid-cols-4 gap-1.5 bg-slate-100 dark:bg-slate-800 p-1 rounded-lg">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-lg">
               {(
                 [
                   { id: 'none', label: 'No Split' },
                   { id: 'equal', label: 'Equal' },
                   { id: 'exact', label: 'Exact ₹' },
                   { id: 'percentage', label: 'Percent %' },
+                  { id: 'external', label: 'Lend / Group' },
                 ] as const
               ).map((option) => {
                 const active = splitMode === option.id;
@@ -605,7 +695,7 @@ export function ExpenseModal({
                     key={option.id}
                     type="button"
                     onClick={() => handleSplitModeChange(option.id)}
-                    className={`py-1.5 px-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+                    className={`py-1.5 px-2 rounded-md text-xs font-medium transition-colors cursor-pointer whitespace-nowrap ${
                       active
                         ? 'bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 shadow-xs'
                         : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
@@ -768,7 +858,117 @@ export function ExpenseModal({
                 </button>
               </div>
             )}
+
+            {splitMode === 'external' && (
+              <div className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg p-3.5 space-y-3">
+                <div>
+                  <span className="text-xs font-semibold text-slate-800 dark:text-slate-200 block">
+                    External Lending / Non-Member Split
+                  </span>
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400 block">
+                    Split across people outside this project and record repayments as each person pays back
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <label className="space-y-1 block">
+                    <span className="text-[11px] font-medium text-slate-600 dark:text-slate-400 block">
+                      Number of People (1–50)
+                    </span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={50}
+                      step={1}
+                      value={externalTotalPeople}
+                      onChange={(e) => setExternalTotalPeople(e.target.value)}
+                      className="w-full px-2.5 py-1.5 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-mono-tabular text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-teal-600"
+                    />
+                  </label>
+
+                  <label className="space-y-1 block">
+                    <span className="text-[11px] font-medium text-slate-600 dark:text-slate-400 block">
+                      Borrower / Group Label (optional)
+                    </span>
+                    <input
+                      type="text"
+                      maxLength={100}
+                      value={externalLabel}
+                      onChange={(e) => setExternalLabel(e.target.value)}
+                      placeholder="e.g. College Friends, Rahul"
+                      className="w-full px-2.5 py-1.5 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-teal-600"
+                    />
+                  </label>
+                </div>
+
+                <label className="flex items-center justify-between gap-3 cursor-pointer">
+                  <div>
+                    <span className="text-xs font-medium text-slate-800 dark:text-slate-200 block">
+                      Include myself in this split
+                    </span>
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400 block">
+                      {parsedExternalPeople === 1
+                        ? 'Single person — full amount is receivable from borrower'
+                        : effectiveExternalIncludeSelf
+                          ? `Split by ${parsedExternalPeople}; ${externalOwedPeople} ${
+                              externalOwedPeople === 1 ? 'person owes' : 'people owe'
+                            } you`
+                          : `All ${parsedExternalPeople} external people owe you`}
+                    </span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    disabled={parsedExternalPeople === 1}
+                    checked={effectiveExternalIncludeSelf}
+                    onChange={(e) => setExternalIncludeSelf(e.target.checked)}
+                    className="w-4 h-4 accent-teal-700 rounded cursor-pointer disabled:opacity-40"
+                  />
+                </label>
+
+                <div className="pt-2 border-t border-slate-200/80 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2 text-xs font-mono-tabular">
+                  <span className="text-slate-600 dark:text-slate-400">
+                    Per person: <strong className="text-slate-900 dark:text-slate-100">{formatAmount(externalPerPerson)}</strong>
+                  </span>
+                  <span className="text-teal-800 dark:text-teal-300 font-semibold">
+                    To collect ({externalOwedPeople}): {formatAmount(externalTotalReceivable)}
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
+
+          {duplicateMatches.length > 0 && (
+            <div
+              role="alert"
+              className="p-3.5 rounded-lg bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800/80 text-xs text-amber-900 dark:text-amber-200 space-y-1.5"
+            >
+              <div className="flex items-start gap-2.5">
+                <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                <div className="space-y-1 min-w-0">
+                  <p className="font-semibold">
+                    Possible duplicate expense ({duplicateMatches.length}{' '}
+                    {duplicateMatches.length === 1 ? 'match' : 'matches'} found)
+                  </p>
+                  <p className="text-amber-800 dark:text-amber-300 leading-relaxed">
+                    An expense with the same description
+                    {description.trim() ? ` (“${description.trim()}”)` : ' (blank)'}, date (
+                    <span className="font-mono-tabular">{date}</span>), and amount (
+                    <span className="font-mono-tabular font-semibold">
+                      {formatAmount(numericAmount)}
+                    </span>
+                    ) already exists in {project.name} — logged by{' '}
+                    <span className="font-medium">{duplicateMatches[0].paidByName}</span> via{' '}
+                    <span className="font-medium">{duplicateMatches[0].paymentMethod}</span>.
+                  </p>
+                  {duplicateConfirmPending && (
+                    <p className="font-semibold text-amber-900 dark:text-amber-100">
+                      Click &ldquo;Save Anyway&rdquo; below to confirm logging this duplicate entry.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
 
           {error && (
             <div
@@ -790,10 +990,20 @@ export function ExpenseModal({
             <button
               type="submit"
               disabled={saving}
-              className="px-4 py-2 text-sm font-medium rounded-lg bg-teal-700 hover:bg-teal-800 text-white inline-flex items-center gap-2 disabled:opacity-60 cursor-pointer"
+              className={`px-4 py-2 text-sm font-medium rounded-lg text-white inline-flex items-center gap-2 disabled:opacity-60 cursor-pointer transition-colors ${
+                duplicateConfirmPending && duplicateMatches.length > 0
+                  ? 'bg-amber-600 hover:bg-amber-700'
+                  : 'bg-teal-700 hover:bg-teal-800'
+              }`}
             >
               {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-              <span>{editingExpense ? 'Save Changes' : 'Save Expense'}</span>
+              <span>
+                {duplicateConfirmPending && duplicateMatches.length > 0
+                  ? 'Save Anyway'
+                  : editingExpense
+                    ? 'Save Changes'
+                    : 'Save Expense'}
+              </span>
             </button>
           </div>
         </form>
@@ -1163,10 +1373,20 @@ export function InviteModal({
 interface TagModalProps {
   open: boolean;
   onClose: () => void;
+  tags: Tag[];
+  defaultParentCategory?: string;
+  editingTag?: Tag | null;
   onSubmit: (name: string, color: string, parentCategory: string) => Promise<void>;
 }
 
-export function TagModal({ open, onClose, onSubmit }: TagModalProps) {
+export function TagModal({
+  open,
+  onClose,
+  tags,
+  defaultParentCategory = '',
+  editingTag = null,
+  onSubmit,
+}: TagModalProps) {
   const [name, setName] = useState('');
   const [color, setColor] = useState(TAG_COLOR_SWATCHES[0]);
   const [parentCategory, setParentCategory] = useState('');
@@ -1175,27 +1395,85 @@ export function TagModal({ open, onClose, onSubmit }: TagModalProps) {
 
   useEffect(() => {
     if (!open) return;
-    setName('');
-    setColor(TAG_COLOR_SWATCHES[0]);
-    setParentCategory('');
+    if (editingTag) {
+      setName(editingTag.name);
+      setColor(editingTag.color || TAG_COLOR_SWATCHES[0]);
+      setParentCategory(editingTag.parentCategory || '');
+    } else {
+      setName('');
+      setColor(TAG_COLOR_SWATCHES[0]);
+      setParentCategory(defaultParentCategory);
+    }
     setError(null);
-  }, [open]);
+  }, [open, editingTag, defaultParentCategory]);
+
+  // Exclude the tag being edited and any of its descendants to avoid cycles
+  const availableParentOptions = useMemo(() => {
+    const blockedNames = new Set<string>();
+    if (editingTag) {
+      const queue = [editingTag.name.trim().toLowerCase()];
+      while (queue.length > 0) {
+        const current = queue.shift()!;
+        if (blockedNames.has(current)) continue;
+        blockedNames.add(current);
+        for (const t of tags) {
+          if (t.parentCategory.trim().toLowerCase() === current) {
+            queue.push(t.name.trim().toLowerCase());
+          }
+        }
+      }
+    }
+
+    return [...tags]
+      .filter((t) => !blockedNames.has(t.name.trim().toLowerCase()))
+      .sort((a, b) => {
+        // Show top-level tags first, then sub-tags alphabetically
+        const aTop = a.parentCategory.trim() === '' ? 0 : 1;
+        const bTop = b.parentCategory.trim() === '' ? 0 : 1;
+        if (aTop !== bTop) return aTop - bTop;
+        return a.name.localeCompare(b.name);
+      });
+  }, [tags, editingTag]);
 
   if (!open) return null;
 
+  const isEditing = Boolean(editingTag);
+  const modalTitle = isEditing
+    ? `Edit Tag: ${editingTag!.name}`
+    : defaultParentCategory
+    ? `Add Sub-tag under "${defaultParentCategory}"`
+    : 'Create Tag';
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) {
+    const trimmedName = name.trim();
+    if (!trimmedName) {
       setError('Tag name is required.');
       return;
     }
+    const duplicate = tags.some(
+      (t) =>
+        t.id !== editingTag?.id &&
+        t.name.trim().toLowerCase() === trimmedName.toLowerCase()
+    );
+    if (duplicate) {
+      setError('A tag with this name already exists in the project.');
+      return;
+    }
+    if (
+      parentCategory.trim().toLowerCase() === trimmedName.toLowerCase()
+    ) {
+      setError('A tag cannot be its own parent.');
+      return;
+    }
+
     setSaving(true);
     setError(null);
     try {
-      await onSubmit(name.trim(), color, parentCategory.trim());
+      await onSubmit(trimmedName, color, parentCategory.trim());
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to create tag.');
+      setError(err instanceof Error ? err.message : 'Unable to save tag.');
     } finally {
       setSaving(false);
     }
@@ -1205,19 +1483,19 @@ export function TagModal({ open, onClose, onSubmit }: TagModalProps) {
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="Create Custom Tag"
+      aria-label={modalTitle}
       className="fixed inset-0 z-50 bg-slate-900/40 dark:bg-black/60 flex items-center justify-center p-4"
     >
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl w-full max-w-md">
-        <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
-          <h2 className="font-display text-base font-bold text-slate-900 dark:text-slate-100">
-            Create Custom Tag
+        <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3">
+          <h2 className="font-display text-base font-bold text-slate-900 dark:text-slate-100 truncate">
+            {modalTitle}
           </h2>
           <button
             type="button"
             onClick={onClose}
             aria-label="Close modal"
-            className="p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+            className="p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer shrink-0"
           >
             <X className="w-4 h-4" />
           </button>
@@ -1234,23 +1512,30 @@ export function TagModal({ open, onClose, onSubmit }: TagModalProps) {
               maxLength={40}
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Gym, Rent, Pet Care"
+              placeholder="e.g. Travel, Flights, Petrol, Rent"
               className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-teal-600"
             />
           </label>
 
           <label className="space-y-1.5 block">
             <span className="text-xs font-medium text-slate-700 dark:text-slate-300 block">
-              Parent Category (optional)
+              Parent Tag (optional)
             </span>
             <select
               value={parentCategory}
               onChange={(e) => setParentCategory(e.target.value)}
               className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-950 focus:outline-none focus:border-teal-600"
             >
-              <option value="">None (Top-level Tag)</option>
-              <option value="Bills">Bills (Sub-tag)</option>
+              <option value="">None (Top-level Parent Tag)</option>
+              {availableParentOptions.map((t) => (
+                <option key={t.id} value={t.name}>
+                  {t.parentCategory ? `${t.name} (under ${t.parentCategory})` : t.name}
+                </option>
+              ))}
             </select>
+            <span className="text-[11px] text-slate-500 dark:text-slate-400 block">
+              Leave as Top-level to create a parent tag, or pick any existing tag to create a child sub-tag.
+            </span>
           </label>
 
           <div className="space-y-2">
@@ -1298,7 +1583,7 @@ export function TagModal({ open, onClose, onSubmit }: TagModalProps) {
               className="px-4 py-2 text-sm font-medium rounded-lg bg-teal-700 hover:bg-teal-800 text-white inline-flex items-center gap-2 disabled:opacity-60 cursor-pointer"
             >
               {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-              <span>Create Tag</span>
+              <span>{isEditing ? 'Save Changes' : 'Create Tag'}</span>
             </button>
           </div>
         </form>

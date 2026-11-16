@@ -122,7 +122,8 @@ service cloud.firestore {
       return mode == 'none' ||
         mode == 'equal' ||
         mode == 'exact' ||
-        mode == 'percentage';
+        mode == 'percentage' ||
+        mode == 'external';
     }
 
     function isValidExpense(data) {
@@ -136,6 +137,7 @@ service cloud.firestore {
           'paidByPhoto', 'paymentMethod', 'tagIds', 'createdByUid',
           'projectMemberUids', 'source', 'isRecurring', 'frequency',
           'nextDueDate', 'splitMode', 'splitShares', 'splitPercentages',
+          'externalTotalPeople', 'externalIncludeSelf', 'externalLabel',
           'createdAt', 'updatedAt'
         ]) &&
         (data.amount is int || data.amount is float) &&
@@ -159,6 +161,34 @@ service cloud.firestore {
         (!('splitMode' in data) || (data.splitMode is string && data.splitMode.size() <= 20 && isValidSplitMode(data.splitMode))) &&
         (!('splitShares' in data) || (data.splitShares is map && data.splitShares.size() >= 1 && data.splitShares.size() <= 25)) &&
         (!('splitPercentages' in data) || (data.splitPercentages is map && data.splitPercentages.size() >= 1 && data.splitPercentages.size() <= 25)) &&
+        (!('externalTotalPeople' in data) || (data.externalTotalPeople is int && data.externalTotalPeople >= 1 && data.externalTotalPeople <= 50)) &&
+        (!('externalIncludeSelf' in data) || data.externalIncludeSelf is bool) &&
+        (!('externalLabel' in data) || (data.externalLabel is string && data.externalLabel.size() <= 100)) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidReceivedMoney(data) {
+      return data.keys().hasAll([
+          'amount', 'date', 'source', 'paymentMethod',
+          'createdByUid', 'projectMemberUids', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'amount', 'date', 'source', 'note', 'paymentMethod',
+          'linkedExpenseId', 'peoplePaidCount',
+          'createdByUid', 'projectMemberUids', 'createdAt', 'updatedAt'
+        ]) &&
+        (data.amount is int || data.amount is float) &&
+        data.amount > 0 && data.amount <= 100000000 &&
+        data.date is string && data.date.size() == 10 && data.date.matches('^\\d{4}-\\d{2}-\\d{2}$') &&
+        data.source is string && data.source.size() >= 1 && data.source.size() <= 80 &&
+        (!('note' in data) || (data.note is string && data.note.size() <= 200)) &&
+        data.paymentMethod is string && data.paymentMethod.size() <= 40 && isValidPaymentMethod(data.paymentMethod) &&
+        (!('linkedExpenseId' in data) || isValidId(data.linkedExpenseId)) &&
+        (!('peoplePaidCount' in data) || (data.peoplePaidCount is int && data.peoplePaidCount >= 0 && data.peoplePaidCount <= 50)) &&
+        data.createdByUid is string && data.createdByUid.size() >= 1 && data.createdByUid.size() <= 128 &&
+        data.projectMemberUids is list && data.projectMemberUids.size() >= 1 && data.projectMemberUids.size() <= 25 &&
+        data.projectMemberUids[0] is string && data.projectMemberUids[0].size() <= 128 &&
         data.createdAt is timestamp &&
         data.updatedAt is timestamp;
     }
@@ -346,7 +376,9 @@ service cloud.firestore {
             'amount', 'date', 'description', 'paidByUid', 'paidByName',
             'paidByPhoto', 'paymentMethod', 'tagIds', 'projectMemberUids',
             'isRecurring', 'frequency', 'nextDueDate', 'splitMode',
-            'splitShares', 'splitPercentages', 'updatedAt'
+            'splitShares', 'splitPercentages',
+            'externalTotalPeople', 'externalIncludeSelf', 'externalLabel',
+            'updatedAt'
           ]);
         allow delete: if isVerifiedUser() && isValidId(projectId) && isValidId(expenseId) && isProjectMember(projectId);
       }
@@ -368,6 +400,28 @@ service cloud.firestore {
           isProjectMember(projectId) &&
           incoming().diff(existing()).affectedKeys().hasOnly(['projectMemberUids', 'updatedAt']);
         allow delete: if isVerifiedUser() && isValidId(projectId) && isValidId(settlementId) && isProjectMember(projectId);
+      }
+
+      match /receivedMoney/{receivedId} {
+        allow list: if isSignedIn() && request.auth.uid in resource.data.projectMemberUids;
+        allow get: if isSignedIn() && isValidId(projectId) && isValidId(receivedId) && isProjectMember(projectId);
+        allow create: if isVerifiedUser() && isValidId(projectId) && isValidId(receivedId) &&
+          isValidReceivedMoney(incoming()) &&
+          incoming().createdByUid == request.auth.uid &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time &&
+          isProjectMember(projectId);
+        allow update: if isVerifiedUser() && isValidId(projectId) && isValidId(receivedId) &&
+          isValidReceivedMoney(incoming()) &&
+          incoming().createdByUid == existing().createdByUid &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          isProjectMember(projectId) &&
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'amount', 'date', 'source', 'note', 'paymentMethod',
+            'linkedExpenseId', 'peoplePaidCount', 'projectMemberUids', 'updatedAt'
+          ]);
+        allow delete: if isVerifiedUser() && isValidId(projectId) && isValidId(receivedId) && isProjectMember(projectId);
       }
     }
 

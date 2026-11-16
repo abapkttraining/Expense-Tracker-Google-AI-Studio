@@ -1,8 +1,23 @@
 import { useMemo, useState, type FormEvent } from 'react';
-import { ArrowRight, CheckCircle2, HandCoins, Loader2, Plus, Trash2, X } from 'lucide-react';
+import {
+  ArrowRight,
+  Check,
+  CheckCircle2,
+  HandCoins,
+  Loader2,
+  Pencil,
+  Plus,
+  Trash2,
+  X,
+  Zap,
+} from 'lucide-react';
 import { getTodayISO } from '../constants';
 import { useCurrency } from '../hooks/useCurrency';
-import { computeProjectBalances, type SimplifiedDebt } from '../utils/splitUtils';
+import {
+  computeProjectBalances,
+  prioritizeDebtsForUser,
+  type SimplifiedDebt,
+} from '../utils/splitUtils';
 import {
   PAYMENT_METHODS,
   type Expense,
@@ -50,6 +65,13 @@ export function SplitsBalancesView({
     [expenses, settlements, members]
   );
 
+  const [suggestionMode, setSuggestionMode] = useState<'simplified' | 'pairwise'>('simplified');
+  const [quickMethod, setQuickMethod] = useState<PaymentMethod>('PhonePe');
+  const [settlingRowKey, setSettlingRowKey] = useState<string | null>(null);
+  const [confirmSettleAll, setConfirmSettleAll] = useState(false);
+  const [settlingAll, setSettlingAll] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+
   const [settleModalOpen, setSettleModalOpen] = useState(false);
   const [fromUid, setFromUid] = useState('');
   const [toUid, setToUid] = useState('');
@@ -73,10 +95,22 @@ export function SplitsBalancesView({
     return Array.from(map.values());
   }, [members, report.memberBalances]);
 
-  const openQuickSettle = (debt?: SimplifiedDebt) => {
+  const showModeToggle =
+    report.simplifiedDebts.length > 0 &&
+    report.pairwiseDebts.length > 0 &&
+    (report.transfersSaved > 0 || report.pairwiseDebts.length !== report.simplifiedDebts.length);
+
+  const effectiveMode = showModeToggle ? suggestionMode : 'simplified';
+
+  const displayedDebts = useMemo(() => {
+    const raw = effectiveMode === 'pairwise' ? report.pairwiseDebts : report.simplifiedDebts;
+    return prioritizeDebtsForUser(raw, currentUserUid);
+  }, [effectiveMode, report.pairwiseDebts, report.simplifiedDebts, currentUserUid]);
+
+  const openSettleModal = (debt?: SimplifiedDebt) => {
     setFormError(null);
     setDate(getTodayISO());
-    setPaymentMethod('PhonePe');
+    setPaymentMethod(quickMethod);
     if (debt) {
       setFromUid(debt.fromUid);
       setToUid(debt.toUid);
@@ -91,6 +125,61 @@ export function SplitsBalancesView({
       setNote('');
     }
     setSettleModalOpen(true);
+  };
+
+  const handleQuickSettle = async (debt: SimplifiedDebt) => {
+    const rowKey = `${debt.fromUid}-${debt.toUid}`;
+    setSettlingRowKey(rowKey);
+    setActionError(null);
+    setConfirmSettleAll(false);
+    try {
+      await onRecordSettlement({
+        fromUid: debt.fromUid,
+        fromName: debt.fromName,
+        fromPhoto: debt.fromPhoto,
+        toUid: debt.toUid,
+        toName: debt.toName,
+        toPhoto: debt.toPhoto,
+        amount: debt.amount,
+        date: getTodayISO(),
+        paymentMethod: quickMethod,
+        note: `Quick settlement (${projectName})`,
+      });
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Failed to record quick settlement.');
+    } finally {
+      setSettlingRowKey(null);
+    }
+  };
+
+  const handleSettleAll = async () => {
+    if (report.simplifiedDebts.length === 0) return;
+    setSettlingAll(true);
+    setActionError(null);
+    const snapshot = [...report.simplifiedDebts];
+    try {
+      for (const debt of snapshot) {
+        await onRecordSettlement({
+          fromUid: debt.fromUid,
+          fromName: debt.fromName,
+          fromPhoto: debt.fromPhoto,
+          toUid: debt.toUid,
+          toName: debt.toName,
+          toPhoto: debt.toPhoto,
+          amount: debt.amount,
+          date: getTodayISO(),
+          paymentMethod: quickMethod,
+          note: `Quick settle all (${projectName})`,
+        });
+      }
+      setConfirmSettleAll(false);
+    } catch (err) {
+      setActionError(
+        err instanceof Error ? err.message : 'Failed while settling all suggested balances.'
+      );
+    } finally {
+      setSettlingAll(false);
+    }
   };
 
   const handleSubmitSettlement = async (e: FormEvent) => {
@@ -165,9 +254,13 @@ export function SplitsBalancesView({
           <span className="text-xs text-slate-500 dark:text-slate-400 block">
             {report.simplifiedDebts.length === 0
               ? 'All members are settled up'
-              : `${report.simplifiedDebts.length} suggested ${
-                  report.simplifiedDebts.length === 1 ? 'transfer' : 'transfers'
-                }`}
+              : report.transfersSaved > 0
+                ? `${report.simplifiedDebts.length} quick ${
+                    report.simplifiedDebts.length === 1 ? 'transfer' : 'transfers'
+                  } (saves ${report.transfersSaved})`
+                : `${report.simplifiedDebts.length} suggested ${
+                    report.simplifiedDebts.length === 1 ? 'transfer' : 'transfers'
+                  }`}
           </span>
         </div>
 
@@ -185,28 +278,156 @@ export function SplitsBalancesView({
       </section>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Suggested Simplified Settlements */}
-        <section className="lg:col-span-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 space-y-4">
-          <div className="flex items-center justify-between gap-3">
+        {/* Quick Settlement Suggestions */}
+        <section className="lg:col-span-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 space-y-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <h2 className="font-display text-base font-bold text-slate-900 dark:text-slate-100">
-                Who Pays Whom
+              <h2 className="font-display text-base font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
+                <Zap className="w-4 h-4 text-teal-700 dark:text-teal-400 shrink-0" />
+                <span>Quick Settlement Suggestions</span>
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                Minimal transfers to settle {projectName} balances
+                {report.simplifiedDebts.length === 0
+                  ? `All ${projectName} collaborator balances are settled`
+                  : effectiveMode === 'pairwise'
+                    ? 'Direct pair-by-pair balances across individual shared expenses'
+                    : report.transfersSaved > 0
+                      ? `Consolidated ${report.pairwiseDebts.length} direct splits into ${report.simplifiedDebts.length} quick ${
+                          report.simplifiedDebts.length === 1 ? 'transfer' : 'transfers'
+                        }`
+                      : `Minimum transfers to settle ${projectName} balances`}
               </p>
             </div>
             {memberOptions.length > 1 && (
               <button
                 type="button"
-                onClick={() => openQuickSettle()}
-                className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 inline-flex items-center gap-1.5 cursor-pointer shrink-0"
+                onClick={() => openSettleModal()}
+                className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 inline-flex items-center gap-1.5 cursor-pointer shrink-0 whitespace-nowrap"
               >
                 <HandCoins className="w-3.5 h-3.5" />
                 <span>Custom Settle</span>
               </button>
             )}
           </div>
+
+          {report.simplifiedDebts.length > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-2.5 pt-1 pb-2 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex flex-wrap items-center gap-2">
+                {showModeToggle && (
+                  <div
+                    role="tablist"
+                    aria-label="Settlement suggestion mode"
+                    className="inline-flex rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/70 p-0.5"
+                  >
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={effectiveMode === 'simplified'}
+                      onClick={() => {
+                        setSuggestionMode('simplified');
+                        setConfirmSettleAll(false);
+                      }}
+                      className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap ${
+                        effectiveMode === 'simplified'
+                          ? 'bg-white dark:bg-slate-900 text-teal-800 dark:text-teal-300 shadow-xs'
+                          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                      }`}
+                    >
+                      Smart Simplified ({report.simplifiedDebts.length})
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={effectiveMode === 'pairwise'}
+                      onClick={() => {
+                        setSuggestionMode('pairwise');
+                        setConfirmSettleAll(false);
+                      }}
+                      className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap ${
+                        effectiveMode === 'pairwise'
+                          ? 'bg-white dark:bg-slate-900 text-teal-800 dark:text-teal-300 shadow-xs'
+                          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                      }`}
+                    >
+                      Direct Pairwise ({report.pairwiseDebts.length})
+                    </button>
+                  </div>
+                )}
+
+                <label className="inline-flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400">
+                  <span>Via</span>
+                  <select
+                    aria-label="Quick settle payment method"
+                    value={quickMethod}
+                    onChange={(e) => setQuickMethod(e.target.value as PaymentMethod)}
+                    className="px-2 py-1 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs font-medium text-slate-800 dark:text-slate-200 focus:outline-none focus:border-teal-600"
+                  >
+                    {PAYMENT_METHODS.map((m) => (
+                      <option key={m} value={m}>
+                        {m}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
+              {effectiveMode === 'simplified' && report.simplifiedDebts.length >= 2 && (
+                <div className="flex items-center gap-1.5">
+                  {!confirmSettleAll ? (
+                    <button
+                      type="button"
+                      disabled={settlingAll || settlingRowKey !== null}
+                      onClick={() => setConfirmSettleAll(true)}
+                      className="px-2.5 py-1 rounded-md border border-teal-200 dark:border-teal-800 bg-teal-50 dark:bg-teal-950/60 text-xs font-semibold text-teal-800 dark:text-teal-300 hover:bg-teal-100 dark:hover:bg-teal-900/60 disabled:opacity-50 cursor-pointer whitespace-nowrap"
+                    >
+                      Settle All ({report.simplifiedDebts.length})
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        disabled={settlingAll}
+                        onClick={() => void handleSettleAll()}
+                        className="px-2.5 py-1 rounded-md bg-teal-700 hover:bg-teal-800 text-white text-xs font-semibold inline-flex items-center gap-1 disabled:opacity-60 cursor-pointer whitespace-nowrap"
+                      >
+                        {settlingAll ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <Check className="w-3 h-3" />
+                        )}
+                        <span>{settlingAll ? 'Settling...' : 'Confirm Settle All'}</span>
+                      </button>
+                      <button
+                        type="button"
+                        disabled={settlingAll}
+                        onClick={() => setConfirmSettleAll(false)}
+                        className="px-2 py-1 rounded-md border border-slate-200 dark:border-slate-700 text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer whitespace-nowrap"
+                      >
+                        Cancel
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {actionError && (
+            <div
+              role="alert"
+              className="p-2.5 rounded-lg bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-900 text-xs text-red-700 dark:text-red-300 flex items-center justify-between gap-2"
+            >
+              <span>{actionError}</span>
+              <button
+                type="button"
+                onClick={() => setActionError(null)}
+                aria-label="Dismiss settlement error"
+                className="p-0.5 rounded hover:bg-red-100 dark:hover:bg-red-900/60 cursor-pointer shrink-0"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
 
           {report.simplifiedDebts.length === 0 ? (
             <div className="py-8 text-center space-y-3 border border-dashed border-slate-200 dark:border-slate-700 rounded-lg px-4">
@@ -217,7 +438,7 @@ export function SplitsBalancesView({
                 </p>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
                   {report.splitExpenseCount === 0
-                    ? 'Add a shared expense with Equal, Exact, or Percentage split to track balances.'
+                    ? 'Add a shared expense with Equal, Exact, or Percentage split to see quick settlement suggestions.'
                     : 'No pending debts remain among collaborators.'}
                 </p>
               </div>
@@ -234,46 +455,88 @@ export function SplitsBalancesView({
             </div>
           ) : (
             <div className="divide-y divide-slate-100 dark:divide-slate-800">
-              {report.simplifiedDebts.map((debt) => (
-                <div
-                  key={`${debt.fromUid}-${debt.toUid}`}
-                  className="py-3.5 flex items-center justify-between gap-3"
-                >
-                  <div className="min-w-0 space-y-1">
-                    <div className="flex items-center gap-2 flex-wrap text-sm">
-                      <span className="inline-flex items-center gap-1.5 font-semibold text-slate-900 dark:text-slate-100">
-                        <UserAvatar name={debt.fromName} photoURL={debt.fromPhoto} size="xs" />
-                        <span className="truncate max-w-[110px]">
-                          {debt.fromUid === currentUserUid ? 'You' : debt.fromName}
+              {displayedDebts.map((debt) => {
+                const rowKey = `${debt.fromUid}-${debt.toUid}`;
+                const isSettlingThis = settlingRowKey === rowKey;
+                const userPays = debt.fromUid === currentUserUid;
+                const userReceives = debt.toUid === currentUserUid;
+                const involvesUser = userPays || userReceives;
+
+                return (
+                  <div
+                    key={rowKey}
+                    className={`py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                      involvesUser
+                        ? 'bg-teal-50/40 dark:bg-teal-950/20 -mx-2.5 px-2.5 rounded-lg'
+                        : ''
+                    }`}
+                  >
+                    <div className="min-w-0 space-y-1">
+                      <div className="flex items-center gap-2 flex-wrap text-sm">
+                        <span className="inline-flex items-center gap-1.5 font-semibold text-slate-900 dark:text-slate-100">
+                          <UserAvatar name={debt.fromName} photoURL={debt.fromPhoto} size="xs" />
+                          <span className="truncate max-w-[115px]">
+                            {userPays ? 'You' : debt.fromName}
+                          </span>
                         </span>
-                      </span>
-                      <ArrowRight className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
-                      <span className="inline-flex items-center gap-1.5 font-semibold text-slate-900 dark:text-slate-100">
-                        <UserAvatar name={debt.toName} photoURL={debt.toPhoto} size="xs" />
-                        <span className="truncate max-w-[110px]">
-                          {debt.toUid === currentUserUid ? 'You' : debt.toName}
+                        <ArrowRight className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                        <span className="inline-flex items-center gap-1.5 font-semibold text-slate-900 dark:text-slate-100">
+                          <UserAvatar name={debt.toName} photoURL={debt.toPhoto} size="xs" />
+                          <span className="truncate max-w-[115px]">
+                            {userReceives ? 'You' : debt.toName}
+                          </span>
                         </span>
-                      </span>
+                      </div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-mono-tabular text-sm font-bold text-teal-800 dark:text-teal-400">
+                          {formatAmount(debt.amount)}
+                        </span>
+                        {userPays && (
+                          <span className="text-[11px] font-semibold text-red-700 dark:text-red-400">
+                            You pay
+                          </span>
+                        )}
+                        {userReceives && (
+                          <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400">
+                            Owes you
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <div className="font-mono-tabular text-sm font-bold text-teal-800 dark:text-teal-400">
-                      {formatAmount(debt.amount)}
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        disabled={settlingAll || settlingRowKey !== null}
+                        onClick={() => openSettleModal(debt)}
+                        aria-label={`Edit settlement from ${debt.fromName} to ${debt.toName}`}
+                        title="Edit amount, date, or note"
+                        className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50 cursor-pointer"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={settlingAll || settlingRowKey !== null}
+                        onClick={() => void handleQuickSettle(debt)}
+                        className="px-3 py-1.5 rounded-lg bg-teal-700 hover:bg-teal-800 text-white text-xs font-semibold inline-flex items-center gap-1.5 disabled:opacity-60 cursor-pointer whitespace-nowrap"
+                      >
+                        {isSettlingThis ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Check className="w-3.5 h-3.5" />
+                        )}
+                        <span>{isSettlingThis ? 'Settling...' : 'Quick Settle'}</span>
+                      </button>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => openQuickSettle(debt)}
-                    className="px-3 py-1.5 rounded-lg bg-teal-700 hover:bg-teal-800 text-white text-xs font-semibold cursor-pointer shrink-0 whitespace-nowrap"
-                  >
-                    Settle Up
-                  </button>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </section>
 
         {/* Member Net Balances */}
-        <section className="lg:col-span-7 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
+        <section className="lg:col-span-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
           <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800">
             <h2 className="font-display text-base font-bold text-slate-900 dark:text-slate-100">
               Member Net Balances
@@ -352,7 +615,7 @@ export function SplitsBalancesView({
 
         {settlements.length === 0 ? (
           <div className="p-8 text-center text-xs text-slate-500 dark:text-slate-400">
-            No settlements recorded yet. Use &ldquo;Settle Up&rdquo; above once a member pays back their share.
+            No settlements recorded yet. Use &ldquo;Quick Settle&rdquo; above once a member pays back their share.
           </div>
         ) : (
           <div className="overflow-x-auto">

@@ -1,7 +1,8 @@
 import { useMemo } from 'react';
-import { Pencil, Plus, Trash2 } from 'lucide-react';
+import { HandCoins, Pencil, Plus, Trash2 } from 'lucide-react';
 import { formatINR } from '../constants';
 import { useCurrency } from '../hooks/useCurrency';
+import { getExternalSplitInfo } from '../utils/lendingUtils';
 import { computeNextDueDate, formatFrequencyLabel } from '../utils/recurringUtils';
 import { formatSplitSummaryLabel } from '../utils/splitUtils';
 import type { Expense, ProjectMember, Tag } from '../types';
@@ -11,9 +12,11 @@ interface ExpenseTableProps {
   expenses: Expense[];
   tags: Tag[];
   members?: ProjectMember[];
+  receivedByExpenseId?: Map<string, { totalAmount: number; peoplePaidCount: number }>;
   loading: boolean;
   onEdit: (expense: Expense) => void;
   onDelete: (expense: Expense) => void;
+  onRecordReceived?: (expense: Expense) => void;
   onAddFirst: () => void;
   hasActiveFilters: boolean;
   onClearFilters: () => void;
@@ -23,9 +26,11 @@ export function ExpenseTable({
   expenses,
   tags,
   members = [],
+  receivedByExpenseId,
   loading,
   onEdit,
   onDelete,
+  onRecordReceived,
   onAddFirst,
   hasActiveFilters,
   onClearFilters,
@@ -133,6 +138,24 @@ export function ExpenseTable({
                 .map((id) => tagMap.get(id))
                 .filter((t): t is Tag => Boolean(t));
               const splitLabel = formatSplitSummaryLabel(expense, memberMap, formatAmount);
+              const extInfo = getExternalSplitInfo(expense);
+              const receivedInfo = receivedByExpenseId?.get(expense.id);
+              const paidAmt = receivedInfo?.totalAmount ?? 0;
+              const extRemaining = extInfo
+                ? Math.max(0, Math.round((extInfo.totalReceivable - paidAmt) * 100) / 100)
+                : 0;
+              const extPaidPeople = extInfo
+                ? Math.min(
+                    extInfo.owedPeopleCount,
+                    Math.max(
+                      receivedInfo?.peoplePaidCount ?? 0,
+                      extInfo.perPersonShare > 0
+                        ? Math.floor((paidAmt + 0.01) / extInfo.perPersonShare)
+                        : 0
+                    )
+                  )
+                : 0;
+              const regularNet = Math.max(0, Math.round((expense.amount - paidAmt) * 100) / 100);
 
               return (
                 <tr
@@ -173,6 +196,22 @@ export function ExpenseTable({
                           </span>
                         </>
                       )}
+                      {extInfo && (
+                        <>
+                          <span aria-hidden="true">·</span>
+                          <span
+                            className={`font-mono-tabular font-medium ${
+                              extRemaining <= 0.01
+                                ? 'text-emerald-700 dark:text-emerald-400'
+                                : 'text-amber-700 dark:text-amber-400'
+                            }`}
+                          >
+                            {extRemaining <= 0.01
+                              ? 'Lending settled'
+                              : `${extPaidPeople}/${extInfo.owedPeopleCount} paid · Left ${formatAmount(extRemaining)}`}
+                          </span>
+                        </>
+                      )}
                       {expense.isRecurring && expense.frequency && (
                         <>
                           <span aria-hidden="true">·</span>
@@ -210,6 +249,16 @@ export function ExpenseTable({
                     className="py-3 px-4 text-right font-mono-tabular font-semibold text-slate-900 dark:text-slate-100 whitespace-nowrap"
                   >
                     <div>{formatAmount(expense.amount)}</div>
+                    {!extInfo && paidAmt > 0 && (
+                      <div className="text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
+                        -{formatAmount(paidAmt)} · Net {formatAmount(regularNet)}
+                      </div>
+                    )}
+                    {extInfo && paidAmt > 0 && (
+                      <div className="text-[11px] font-medium text-teal-700 dark:text-teal-400">
+                        {extRemaining <= 0.01 ? 'Settled' : `Left ${formatAmount(extRemaining)}`}
+                      </div>
+                    )}
                     {currency !== 'INR' && (
                       <div className="text-[11px] font-normal text-slate-400 dark:text-slate-500">
                         {formatINR(expense.amount)}
@@ -218,6 +267,25 @@ export function ExpenseTable({
                   </td>
                   <td className="py-3 px-5 text-right whitespace-nowrap">
                     <div className="inline-flex items-center justify-end gap-1">
+                      {onRecordReceived && (
+                        <button
+                          type="button"
+                          onClick={() => onRecordReceived(expense)}
+                          title={
+                            extInfo
+                              ? 'Record repayment (by people paid or amount)'
+                              : 'Balance out this expense with received money'
+                          }
+                          aria-label={
+                            extInfo
+                              ? `Record repayment for ${expense.description || 'expense'}`
+                              : `Balance out ${expense.description || 'expense'}`
+                          }
+                          className="p-2 rounded-lg text-teal-700 dark:text-teal-400 hover:bg-teal-50 dark:hover:bg-teal-950/50 transition-colors cursor-pointer"
+                        >
+                          <HandCoins className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => onEdit(expense)}

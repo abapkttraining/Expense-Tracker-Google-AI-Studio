@@ -1,8 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { onAuthStateChanged, signInWithPopup, signOut, type User } from 'firebase/auth';
 import {
+  ArrowDownLeft,
+  ArrowRight,
   Check,
   ChevronUp,
+  CornerDownRight,
   Download,
   FileDown,
   FolderPlus,
@@ -14,12 +17,15 @@ import {
   Pencil,
   Plus,
   RefreshCw,
+  RotateCcw,
   Search,
+  SlidersHorizontal,
   Sun,
   Tag as TagIcon,
   Trash2,
   UserPlus,
   X,
+  Zap,
 } from 'lucide-react';
 import { auth, googleAuthProvider } from './lib/firebase';
 import { formatINR, getTodayISO } from './constants';
@@ -28,11 +34,13 @@ import {
   createCustomTag,
   createExpense,
   createProject,
+  createReceivedMoney,
   createSettlement,
   declineInvite,
   deleteCustomTag,
   deleteExpense,
   deleteProject,
+  deleteReceivedMoney,
   deleteSettlement,
   inviteMemberToProject,
   logRecurringBillPayment,
@@ -41,6 +49,7 @@ import {
   subscribePendingInvites,
   subscribeProjectExpenses,
   subscribeProjectMembers,
+  subscribeProjectReceivedMoney,
   subscribeProjectSettlements,
   subscribeProjectTags,
   subscribeSentInvites,
@@ -50,6 +59,7 @@ import {
   updateExpense,
   updateProjectBudget,
   updateProjectDetails,
+  updateTag,
 } from './services/firestoreService';
 import {
   PAYMENT_METHODS,
@@ -60,6 +70,7 @@ import {
   type PaymentMethod,
   type Project,
   type ProjectMember,
+  type ReceivedMoney,
   type RecurringFrequency,
   type Settlement,
   type SplitMode,
@@ -71,26 +82,46 @@ import {
   detectCrossedBudgetThreshold,
   type BudgetToastItem,
 } from './utils/budgetUtils';
+import { computeLendingSummary } from './utils/lendingUtils';
 import { evaluateRecurringBills } from './utils/recurringUtils';
-import { downloadMonthlyExpensePdf } from './utils/pdfReportUtils';
-import { computeEqualSplitShares, computeProjectBalances } from './utils/splitUtils';
+import { downloadFullLedgerPdf, downloadMonthlyExpensePdf } from './utils/pdfReportUtils';
+import {
+  computeEqualSplitShares,
+  computeProjectBalances,
+  prioritizeDebtsForUser,
+} from './utils/splitUtils';
 import { AiExpenseDrawer } from './components/AiExpenseDrawer';
-import { AnalyticsCharts } from './components/AnalyticsCharts';
+import {
+  ExpenseTrendChartCard,
+  PaymentMethodChartCard,
+  SpendingBySubTagsCard,
+  SpendingByTagCard,
+  useExpenseAnalytics,
+} from './components/AnalyticsCharts';
 import { AuthGate } from './components/AuthGate';
 import { BudgetToastContainer } from './components/BudgetToastContainer';
 import { CurrencyToggle } from './components/CurrencyToggle';
 import { ExpenseTable } from './components/ExpenseTable';
+import { LendingAndCreditsView } from './components/LendingAndCreditsView';
 import { ExpenseModal, InviteModal, ProjectModal, TagModal } from './components/Modals';
 import { MonthlyBudgetCard } from './components/MonthlyBudgetCard';
+import { OverviewCustomizeModal } from './components/OverviewCustomizeModal';
+import { ReceivedMoneyModal } from './components/ReceivedMoneyModal';
 import { RecurringAlertsBanner } from './components/RecurringAlertsBanner';
 import { SpendingInsightsCard } from './components/SpendingInsightsCard';
 import { SplitsBalancesView } from './components/SplitsBalancesView';
 import { ThemeToggleButton } from './components/ThemeToggleButton';
 import { UserAvatar } from './components/UserAvatar';
 import { useCurrency } from './hooks/useCurrency';
+import {
+  DEFAULT_METRIC_ORDER,
+  useOverviewLayout,
+  type OverviewMetricId,
+  type OverviewWidgetId,
+} from './hooks/useOverviewLayout';
 import { useTheme } from './hooks/useTheme';
 
-type ActiveView = 'overview' | 'ledger' | 'splits' | 'manage';
+type ActiveView = 'overview' | 'ledger' | 'splits' | 'lending' | 'manage';
 
 const EMPTY_FILTERS: ExpenseFilters = {
   search: '',
@@ -115,6 +146,7 @@ export default function App() {
   const [tags, setTags] = useState<Tag[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [settlements, setSettlements] = useState<Settlement[]>([]);
+  const [receivedMoney, setReceivedMoney] = useState<ReceivedMoney[]>([]);
   const [expensesLoading, setExpensesLoading] = useState(false);
 
   const [pendingInvites, setPendingInvites] = useState<Invite[]>([]);
@@ -128,21 +160,32 @@ export default function App() {
 
   const [expenseModalOpen, setExpenseModalOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
+  const [expenseInitialSplitMode, setExpenseInitialSplitMode] = useState<SplitMode | undefined>(undefined);
+  const [receivedModalOpen, setReceivedModalOpen] = useState(false);
+  const [receivedTargetExpense, setReceivedTargetExpense] = useState<Expense | null>(null);
   const [projectModalOpen, setProjectModalOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
   const [tagModalOpen, setTagModalOpen] = useState(false);
+  const [defaultTagParent, setDefaultTagParent] = useState('');
+  const [editingTag, setEditingTag] = useState<Tag | null>(null);
 
   const [confirmDeleteExpense, setConfirmDeleteExpense] = useState<Expense | null>(null);
   const [confirmDeleteProject, setConfirmDeleteProject] = useState<Project | null>(null);
   const [globalError, setGlobalError] = useState<string | null>(null);
   const [budgetToasts, setBudgetToasts] = useState<BudgetToastItem[]>([]);
   const [exportingPdf, setExportingPdf] = useState(false);
+  const [exportingFullPdf, setExportingFullPdf] = useState(false);
+  const [customizeOverviewOpen, setCustomizeOverviewOpen] = useState(false);
+  const [selectedAnalyticsParentId, setSelectedAnalyticsParentId] = useState('');
+  const [overviewQuickSettlingKey, setOverviewQuickSettlingKey] = useState<string | null>(null);
+  const [overviewConfirmSettleKey, setOverviewConfirmSettleKey] = useState<string | null>(null);
 
   const [scheduleTickDate, setScheduleTickDate] = useState<string>(() => getTodayISO());
   const [lastScheduleCheck, setLastScheduleCheck] = useState<Date>(() => new Date());
 
   const { theme, isDark, setTheme } = useTheme();
+  const overviewLayout = useOverviewLayout();
   const {
     currency,
     rates,
@@ -199,6 +242,7 @@ export default function App() {
         setTags([]);
         setExpenses([]);
         setSettlements([]);
+        setReceivedMoney([]);
         setPendingInvites([]);
         setSentInvites([]);
         bootstrappedUserRef.current = null;
@@ -255,17 +299,19 @@ export default function App() {
     [projects, activeProjectId]
   );
 
-  // Subscribe to active project members, tags, expenses, settlements, sent invites
+  // Subscribe to active project members, tags, expenses, settlements, receivedMoney, sent invites
   useEffect(() => {
     if (!user || !activeProject) {
       setMembers([]);
       setTags([]);
       setExpenses([]);
       setSettlements([]);
+      setReceivedMoney([]);
       setSentInvites([]);
       return;
     }
 
+    setOverviewConfirmSettleKey(null);
     setExpensesLoading(true);
     const unsubMembers = subscribeProjectMembers(
       activeProject.id,
@@ -297,6 +343,12 @@ export default function App() {
       (list) => setSettlements(list),
       (err) => setGlobalError(err.message)
     );
+    const unsubReceived = subscribeProjectReceivedMoney(
+      activeProject.id,
+      user.uid,
+      (list) => setReceivedMoney(list),
+      (err) => setGlobalError(err.message)
+    );
     const unsubSent = subscribeSentInvites(
       activeProject.id,
       user.uid,
@@ -309,6 +361,7 @@ export default function App() {
       unsubTags();
       unsubExpenses();
       unsubSettlements();
+      unsubReceived();
       unsubSent();
     };
   }, [user, activeProject?.id]);
@@ -322,9 +375,10 @@ export default function App() {
       members,
       tags,
       expenses,
-      settlements
+      settlements,
+      receivedMoney
     );
-  }, [user, activeProject, members, tags, expenses, settlements]);
+  }, [user, activeProject, members, tags, expenses, settlements, receivedMoney]);
 
   // Scheduled recurring bills check: runs immediately on expense updates, every 60s, and on tab focus
   useEffect(() => {
@@ -369,30 +423,106 @@ export default function App() {
     [expenses, settlements, members]
   );
 
+  const lendingSummary = useMemo(
+    () => computeLendingSummary(expenses, receivedMoney, scheduleTickDate.slice(0, 7)),
+    [expenses, receivedMoney, scheduleTickDate]
+  );
+
   const currentUserNetBalance = useMemo(() => {
     if (!user) return 0;
     return balanceReport.memberBalances.find((b) => b.uid === user.uid)?.netBalance ?? 0;
   }, [balanceReport.memberBalances, user]);
 
+  const topQuickSettlements = useMemo(
+    () => prioritizeDebtsForUser(balanceReport.simplifiedDebts, user?.uid ?? '').slice(0, 3),
+    [balanceReport.simplifiedDebts, user]
+  );
+
   const filteredExpenses = useMemo(() => {
     const q = filters.search.trim().toLowerCase();
+    let effectiveTagIds: Set<string> | null = null;
+    if (filters.tagIds.length > 0) {
+      effectiveTagIds = new Set<string>(filters.tagIds);
+      const childrenByParentName = new Map<string, Tag[]>();
+      for (const t of tags) {
+        const parentKey = t.parentCategory.trim().toLowerCase();
+        if (!parentKey) continue;
+        const list = childrenByParentName.get(parentKey) ?? [];
+        list.push(t);
+        childrenByParentName.set(parentKey, list);
+      }
+      const queue = [...filters.tagIds];
+      while (queue.length > 0) {
+        const currentId = queue.shift()!;
+        const currentTag = tags.find((t) => t.id === currentId);
+        if (!currentTag) continue;
+        const children =
+          childrenByParentName.get(currentTag.name.trim().toLowerCase()) ?? [];
+        for (const child of children) {
+          if (!effectiveTagIds.has(child.id)) {
+            effectiveTagIds.add(child.id);
+            queue.push(child.id);
+          }
+        }
+      }
+    }
+
     return expenses.filter((exp) => {
       if (q && !(exp.description || '').toLowerCase().includes(q)) return false;
       if (filters.memberUid !== 'all' && exp.paidByUid !== filters.memberUid) return false;
       if (filters.paymentMethod !== 'all' && exp.paymentMethod !== filters.paymentMethod) {
         return false;
       }
-      if (
-        filters.tagIds.length > 0 &&
-        !filters.tagIds.some((tid) => exp.tagIds.includes(tid))
-      ) {
+      if (effectiveTagIds && !exp.tagIds.some((tid) => effectiveTagIds.has(tid))) {
         return false;
       }
       if (filters.startDate && exp.date < filters.startDate) return false;
       if (filters.endDate && exp.date > filters.endDate) return false;
       return true;
     });
-  }, [expenses, filters]);
+  }, [expenses, filters, tags]);
+
+  const hierarchicalTags = useMemo(() => {
+    const childrenMap = new Map<string, Tag[]>();
+    const tagByName = new Map<string, Tag>();
+    for (const t of tags) {
+      tagByName.set(t.name.trim().toLowerCase(), t);
+    }
+
+    const roots: Tag[] = [];
+    for (const t of tags) {
+      const parentKey = t.parentCategory.trim().toLowerCase();
+      if (!parentKey || !tagByName.has(parentKey) || parentKey === t.name.trim().toLowerCase()) {
+        roots.push(t);
+      } else {
+        const list = childrenMap.get(parentKey) ?? [];
+        list.push(t);
+        childrenMap.set(parentKey, list);
+      }
+    }
+
+    const rows: Array<{ tag: Tag; depth: number; childCount: number }> = [];
+    const visited = new Set<string>();
+    const visit = (tag: Tag, depth: number) => {
+      if (visited.has(tag.id)) return;
+      visited.add(tag.id);
+      const children = childrenMap.get(tag.name.trim().toLowerCase()) ?? [];
+      rows.push({ tag, depth, childCount: children.length });
+      for (const child of children) {
+        visit(child, depth + 1);
+      }
+    };
+
+    for (const root of roots) {
+      visit(root, 0);
+    }
+    for (const t of tags) {
+      if (!visited.has(t.id)) {
+        visit(t, 0);
+      }
+    }
+    return rows;
+  }, [tags]);
 
   const hasActiveFilters = Boolean(
     filters.search ||
@@ -453,6 +583,15 @@ export default function App() {
     };
   }, [filteredExpenses, expenses, tags]);
 
+  const analytics = useExpenseAnalytics({
+    expenses: filteredExpenses,
+    tags,
+    timeframe,
+    isDark,
+    selectedParentTagId: selectedAnalyticsParentId,
+    onSelectParentTagId: setSelectedAnalyticsParentId,
+  });
+
   const handleSignIn = async () => {
     setSigningIn(true);
     setAuthError(null);
@@ -509,6 +648,9 @@ export default function App() {
     splitMode: SplitMode;
     splitShares?: Record<string, number>;
     splitPercentages?: Record<string, number>;
+    externalTotalPeople?: number;
+    externalIncludeSelf?: boolean;
+    externalLabel?: string;
   }) => {
     if (!user || !activeProject) return;
     const payer = members.find((m) => m.uid === data.paidByUid) ?? {
@@ -518,7 +660,7 @@ export default function App() {
     };
 
     const currentMonthPrefix = getTodayISO().slice(0, 7);
-    const previousSpend = metrics.thisMonthSpend;
+    const previousSpend = Math.max(0, metrics.thisMonthSpend - lendingSummary.totalReceivedThisMonth);
     const nextContribution = data.date.startsWith(currentMonthPrefix) ? data.amount : 0;
 
     if (editingExpense) {
@@ -540,11 +682,14 @@ export default function App() {
         splitMode: data.splitMode,
         splitShares: data.splitShares,
         splitPercentages: data.splitPercentages,
+        externalTotalPeople: data.externalTotalPeople,
+        externalIncludeSelf: data.externalIncludeSelf,
+        externalLabel: data.externalLabel,
       });
       notifyBudgetThresholdIfCrossed(
         activeProject,
         previousSpend,
-        previousSpend - prevContribution + nextContribution
+        Math.max(0, previousSpend - prevContribution + nextContribution)
       );
     } else {
       await createExpense(activeProject, user, {
@@ -563,6 +708,9 @@ export default function App() {
         splitMode: data.splitMode,
         splitShares: data.splitShares,
         splitPercentages: data.splitPercentages,
+        externalTotalPeople: data.externalTotalPeople,
+        externalIncludeSelf: data.externalIncludeSelf,
+        externalLabel: data.externalLabel,
       });
       notifyBudgetThresholdIfCrossed(
         activeProject,
@@ -729,6 +877,29 @@ export default function App() {
     }
   };
 
+  const handleDownloadFullLedgerPdf = () => {
+    if (!activeProject || !user || exportingFullPdf || expenses.length === 0) return;
+    setExportingFullPdf(true);
+    setGlobalError(null);
+    try {
+      downloadFullLedgerPdf({
+        project: activeProject,
+        expenses,
+        tags,
+        userName: user.displayName || user.email || 'Member',
+        currency,
+        rates,
+        inrPerUnit,
+      });
+    } catch (err) {
+      setGlobalError(
+        err instanceof Error ? err.message : 'Unable to generate full ledger PDF report.'
+      );
+    } finally {
+      setExportingFullPdf(false);
+    }
+  };
+
   if (!authReady) {
     return (
       <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex items-center justify-center">
@@ -748,6 +919,244 @@ export default function App() {
         ? prev.tagIds.filter((id) => id !== tagId)
         : [...prev.tagIds, tagId],
     }));
+  };
+
+  const renderMetricCard = (metricId: OverviewMetricId) => {
+    if (!activeProject) return null;
+    switch (metricId) {
+      case 'totalSpend':
+        return (
+          <div
+            key="totalSpend"
+            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 space-y-1"
+          >
+            <span className="text-xs font-medium text-slate-500 dark:text-slate-400 block">
+              {!hasActiveFilters && lendingSummary.totalReceivedAllTime > 0
+                ? 'Net Total Spend'
+                : `Total Spend ${hasActiveFilters ? '(Filtered)' : ''}`}
+            </span>
+            <div className="font-mono-tabular text-2xl font-bold text-slate-900 dark:text-slate-100">
+              {!hasActiveFilters && lendingSummary.totalReceivedAllTime > 0
+                ? metrics.totalSpend - lendingSummary.totalReceivedAllTime < 0
+                  ? `+${formatAmount(
+                      Math.abs(metrics.totalSpend - lendingSummary.totalReceivedAllTime)
+                    )} surplus`
+                  : formatAmount(metrics.totalSpend - lendingSummary.totalReceivedAllTime)
+                : formatAmount(metrics.totalSpend)}
+            </div>
+            <span className="text-xs text-slate-500 dark:text-slate-400 font-mono-tabular block">
+              {!hasActiveFilters && lendingSummary.totalReceivedAllTime > 0
+                ? `${formatAmount(metrics.totalSpend)} spent − ${formatAmount(
+                    lendingSummary.totalReceivedAllTime
+                  )} received`
+                : `${filteredExpenses.length} ${
+                    filteredExpenses.length === 1 ? 'transaction' : 'transactions'
+                  }`}
+            </span>
+          </div>
+        );
+      case 'thisMonth':
+        return (
+          <div
+            key="thisMonth"
+            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 space-y-1"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                {lendingSummary.totalReceivedThisMonth > 0
+                  ? 'This Month (Net)'
+                  : 'This Month'}
+              </span>
+              <button
+                type="button"
+                onClick={handleDownloadMonthlyPdf}
+                disabled={exportingPdf}
+                title="Download current month's PDF summary report"
+                aria-label="Download monthly PDF summary report"
+                className="px-2 py-0.5 text-[11px] font-semibold rounded-md border border-teal-200 dark:border-teal-800 bg-teal-50 dark:bg-teal-950/60 text-teal-800 dark:text-teal-300 hover:bg-teal-100 dark:hover:bg-teal-900/60 inline-flex items-center gap-1 whitespace-nowrap shrink-0 cursor-pointer disabled:opacity-60 transition-colors"
+              >
+                {exportingPdf ? (
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                ) : (
+                  <FileDown className="w-3 h-3" />
+                )}
+                <span>{exportingPdf ? 'Generating...' : 'PDF Report'}</span>
+              </button>
+            </div>
+            <div className="font-mono-tabular text-2xl font-bold text-slate-900 dark:text-slate-100">
+              {lendingSummary.totalReceivedThisMonth > 0
+                ? metrics.thisMonthSpend - lendingSummary.totalReceivedThisMonth < 0
+                  ? `+${formatAmount(
+                      Math.abs(metrics.thisMonthSpend - lendingSummary.totalReceivedThisMonth)
+                    )} surplus`
+                  : formatAmount(metrics.thisMonthSpend - lendingSummary.totalReceivedThisMonth)
+                : formatAmount(metrics.thisMonthSpend)}
+            </div>
+            <span className="text-xs text-slate-500 dark:text-slate-400 font-mono-tabular block">
+              {lendingSummary.totalReceivedThisMonth > 0
+                ? `${formatAmount(metrics.thisMonthSpend)} − ${formatAmount(
+                    lendingSummary.totalReceivedThisMonth
+                  )} received`
+                : activeProject.monthlyBudget
+                  ? `of ${formatAmount(activeProject.monthlyBudget)} cap`
+                  : new Date().toLocaleDateString('en-IN', {
+                      month: 'long',
+                      year: 'numeric',
+                    })}
+            </span>
+          </div>
+        );
+      case 'topCategory':
+        return (
+          <div
+            key="topCategory"
+            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 space-y-1"
+          >
+            <span className="text-xs font-medium text-slate-500 dark:text-slate-400 block">
+              Top Category
+            </span>
+            <div className="font-display text-xl font-bold text-slate-900 dark:text-slate-100 truncate">
+              {metrics.topTagName}
+            </div>
+            <span className="text-xs text-slate-500 dark:text-slate-400 font-mono-tabular block">
+              {formatAmount(metrics.topTagAmount)}
+            </span>
+          </div>
+        );
+      case 'topMethod':
+        return (
+          <div
+            key="topMethod"
+            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 space-y-1"
+          >
+            <span className="text-xs font-medium text-slate-500 dark:text-slate-400 block">
+              Top Method
+            </span>
+            <div className="font-display text-xl font-bold text-slate-900 dark:text-slate-100 truncate">
+              {metrics.topMethod}
+            </div>
+            <span className="text-xs text-slate-500 dark:text-slate-400 font-mono-tabular block">
+              {formatAmount(metrics.topMethodAmount)}
+            </span>
+          </div>
+        );
+    }
+  };
+
+  const renderSummaryMetricsSection = (
+    metricOrder: OverviewMetricId[],
+    hiddenSet: Set<OverviewMetricId>,
+    sectionKey?: string
+  ) => {
+    if (!activeProject) return null;
+    const visibleIds = metricOrder.filter((id) => !hiddenSet.has(id));
+    if (visibleIds.length === 0) return null;
+
+    const gridColsClass =
+      visibleIds.length === 1
+        ? 'grid-cols-1'
+        : visibleIds.length === 2
+          ? 'grid-cols-1 sm:grid-cols-2'
+          : visibleIds.length === 3
+            ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'
+            : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4';
+
+    return (
+      <section
+        key={sectionKey}
+        aria-label="Project Summary Metrics"
+        className={`grid ${gridColsClass} gap-4`}
+      >
+        {visibleIds.map((id) => renderMetricCard(id))}
+      </section>
+    );
+  };
+
+  const renderOverviewWidget = (widgetId: OverviewWidgetId): ReactNode => {
+    if (!activeProject) return null;
+    switch (widgetId) {
+      case 'summaryMetrics':
+        return renderSummaryMetricsSection(
+          overviewLayout.layout.metricOrder,
+          overviewLayout.hiddenMetricSet,
+          'summaryMetrics'
+        );
+      case 'monthlyBudget':
+        return (
+          <MonthlyBudgetCard
+            key="monthlyBudget"
+            project={activeProject}
+            thisMonthSpend={metrics.thisMonthSpend}
+            thisMonthReceived={lendingSummary.totalReceivedThisMonth}
+            onUpdateBudget={async (budget) => {
+              await updateProjectBudget(activeProject.id, budget);
+            }}
+          />
+        );
+      case 'spendingInsights':
+        return (
+          <SpendingInsightsCard
+            key="spendingInsights"
+            expenses={expenses}
+            tags={tags}
+            activeTagFilters={filters.tagIds}
+            onFilterByTag={toggleFilterTag}
+            onInspectExpense={(exp) => {
+              setEditingExpense(exp);
+              setExpenseInitialSplitMode(undefined);
+              setExpenseModalOpen(true);
+            }}
+            onAddExpense={() => {
+              setEditingExpense(null);
+              setExpenseInitialSplitMode(undefined);
+              setExpenseModalOpen(true);
+            }}
+          />
+        );
+      case 'trendChart':
+        return (
+          <ExpenseTrendChartCard
+            key="trendChart"
+            analytics={analytics}
+            timeframe={timeframe}
+            onTimeframeChange={setTimeframe}
+          />
+        );
+      case 'tagChart':
+        return <SpendingByTagCard key="tagChart" analytics={analytics} />;
+      case 'subTagChart':
+        return <SpendingBySubTagsCard key="subTagChart" analytics={analytics} />;
+      case 'paymentChart':
+        return <PaymentMethodChartCard key="paymentChart" analytics={analytics} />;
+      case 'expenseLedger':
+        return (
+          <ExpenseTable
+            key="expenseLedger"
+            expenses={filteredExpenses}
+            tags={tags}
+            members={members}
+            receivedByExpenseId={lendingSummary.receivedByExpenseId}
+            loading={expensesLoading}
+            hasActiveFilters={hasActiveFilters}
+            onClearFilters={() => setFilters(EMPTY_FILTERS)}
+            onEdit={(exp) => {
+              setEditingExpense(exp);
+              setExpenseInitialSplitMode(undefined);
+              setExpenseModalOpen(true);
+            }}
+            onDelete={(exp) => setConfirmDeleteExpense(exp)}
+            onRecordReceived={(exp) => {
+              setReceivedTargetExpense(exp);
+              setReceivedModalOpen(true);
+            }}
+            onAddFirst={() => {
+              setEditingExpense(null);
+              setExpenseInitialSplitMode(undefined);
+              setExpenseModalOpen(true);
+            }}
+          />
+        );
+    }
   };
 
   return (
@@ -824,26 +1233,30 @@ export default function App() {
                       {proj.name}
                     </button>
                     {proj.ownerId === user.uid && (
-                      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                      <div className="flex items-center gap-0.5 shrink-0">
                         <button
                           type="button"
                           onClick={() => {
                             setEditingProject(proj);
                             setProjectModalOpen(true);
+                            setMobileSidebarOpen(false);
                           }}
                           aria-label={`Edit ${proj.name}`}
-                          className="p-1 rounded text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 cursor-pointer"
+                          className="p-1.5 rounded text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-200/60 dark:hover:bg-slate-700/60 cursor-pointer"
                         >
-                          <Pencil className="w-3 h-3" />
+                          <Pencil className="w-3.5 h-3.5" />
                         </button>
                         {projects.length > 1 && (
                           <button
                             type="button"
-                            onClick={() => setConfirmDeleteProject(proj)}
+                            onClick={() => {
+                              setConfirmDeleteProject(proj);
+                              setMobileSidebarOpen(false);
+                            }}
                             aria-label={`Delete ${proj.name}`}
-                            className="p-1 rounded text-slate-500 dark:text-slate-400 hover:text-red-700 dark:hover:text-red-400 cursor-pointer"
+                            className="p-1.5 rounded text-slate-500 dark:text-slate-400 hover:text-red-700 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 cursor-pointer"
                           >
-                            <Trash2 className="w-3 h-3" />
+                            <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         )}
                       </div>
@@ -1109,6 +1522,17 @@ export default function App() {
             </button>
             <button
               type="button"
+              onClick={() => setActiveView('lending')}
+              className={`text-sm font-medium whitespace-nowrap shrink-0 py-1 border-b-2 transition-colors cursor-pointer ${
+                activeView === 'lending'
+                  ? 'border-teal-700 dark:border-teal-400 text-slate-900 dark:text-slate-100'
+                  : 'border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
+              }`}
+            >
+              Lending{lendingSummary.activeLoanCount > 0 ? ` (${lendingSummary.activeLoanCount})` : ''}
+            </button>
+            <button
+              type="button"
               onClick={() => setActiveView('manage')}
               className={`text-sm font-medium whitespace-nowrap shrink-0 py-1 border-b-2 transition-colors cursor-pointer ${
                 activeView === 'manage'
@@ -1129,6 +1553,7 @@ export default function App() {
               disabled={!activeProject}
               onClick={() => {
                 setEditingExpense(null);
+                setExpenseInitialSplitMode(undefined);
                 setExpenseModalOpen(true);
               }}
               className="px-3.5 sm:px-4 py-2 text-xs sm:text-sm font-semibold rounded-lg bg-teal-700 hover:bg-teal-800 dark:bg-teal-600 dark:hover:bg-teal-500 text-white inline-flex items-center gap-1.5 transition-colors disabled:opacity-50 whitespace-nowrap shrink-0 cursor-pointer"
@@ -1147,6 +1572,13 @@ export default function App() {
               { id: 'overview', label: 'Overview' },
               { id: 'ledger', label: 'Ledger' },
               { id: 'splits', label: 'Balances' },
+              {
+                id: 'lending',
+                label:
+                  lendingSummary.activeLoanCount > 0
+                    ? `Lending (${lendingSummary.activeLoanCount})`
+                    : 'Lending',
+              },
               { id: 'manage', label: 'Tags & Members' },
             ] as const
           ).map((tab) => (
@@ -1210,6 +1642,17 @@ export default function App() {
                   {activeProject.description || 'Shared project expense workspace'}
                 </p>
                 <div className="flex items-center gap-2.5 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setReceivedTargetExpense(null);
+                      setReceivedModalOpen(true);
+                    }}
+                    className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-emerald-200 dark:border-emerald-800/80 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
+                  >
+                    <ArrowDownLeft className="w-3.5 h-3.5" />
+                    <span>+ Received</span>
+                  </button>
                   <button
                     type="button"
                     onClick={() => setInviteModalOpen(true)}
@@ -1318,79 +1761,9 @@ export default function App() {
                 }}
               />
 
-              {/* 4-Column Metric Summary Strip */}
-              <section
-                aria-label="Project Summary Metrics"
-                className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"
-              >
-                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 space-y-1">
-                  <span className="text-xs font-medium text-slate-500 dark:text-slate-400 block">
-                    Total Spend {hasActiveFilters ? '(Filtered)' : ''}
-                  </span>
-                  <div className="font-mono-tabular text-2xl font-bold text-slate-900 dark:text-slate-100">
-                    {formatAmount(metrics.totalSpend)}
-                  </div>
-                  <span className="text-xs text-slate-500 dark:text-slate-400 font-mono-tabular block">
-                    {filteredExpenses.length}{' '}
-                    {filteredExpenses.length === 1 ? 'transaction' : 'transactions'}
-                  </span>
-                </div>
-
-                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 space-y-1">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                      This Month
-                    </span>
-                    <button
-                      type="button"
-                      onClick={handleDownloadMonthlyPdf}
-                      disabled={exportingPdf}
-                      title="Download current month's PDF summary report"
-                      aria-label="Download monthly PDF summary report"
-                      className="px-2 py-0.5 text-[11px] font-semibold rounded-md border border-teal-200 dark:border-teal-800 bg-teal-50 dark:bg-teal-950/60 text-teal-800 dark:text-teal-300 hover:bg-teal-100 dark:hover:bg-teal-900/60 inline-flex items-center gap-1 whitespace-nowrap shrink-0 cursor-pointer disabled:opacity-60 transition-colors"
-                    >
-                      {exportingPdf ? (
-                        <Loader2 className="w-3 h-3 animate-spin" />
-                      ) : (
-                        <FileDown className="w-3 h-3" />
-                      )}
-                      <span>{exportingPdf ? 'Generating...' : 'PDF Report'}</span>
-                    </button>
-                  </div>
-                  <div className="font-mono-tabular text-2xl font-bold text-slate-900 dark:text-slate-100">
-                    {formatAmount(metrics.thisMonthSpend)}
-                  </div>
-                  <span className="text-xs text-slate-500 dark:text-slate-400 font-mono-tabular block">
-                    {activeProject.monthlyBudget
-                      ? `of ${formatAmount(activeProject.monthlyBudget)} cap`
-                      : new Date().toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}
-                  </span>
-                </div>
-
-                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 space-y-1">
-                  <span className="text-xs font-medium text-slate-500 dark:text-slate-400 block">
-                    Top Category
-                  </span>
-                  <div className="font-display text-xl font-bold text-slate-900 dark:text-slate-100 truncate">
-                    {metrics.topTagName}
-                  </div>
-                  <span className="text-xs text-slate-500 dark:text-slate-400 font-mono-tabular block">
-                    {formatAmount(metrics.topTagAmount)}
-                  </span>
-                </div>
-
-                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 space-y-1">
-                  <span className="text-xs font-medium text-slate-500 dark:text-slate-400 block">
-                    Top Method
-                  </span>
-                  <div className="font-display text-xl font-bold text-slate-900 dark:text-slate-100 truncate">
-                    {metrics.topMethod}
-                  </div>
-                  <span className="text-xs text-slate-500 dark:text-slate-400 font-mono-tabular block">
-                    {formatAmount(metrics.topMethodAmount)}
-                  </span>
-                </div>
-              </section>
+              {/* Metric Summary Strip (non-Overview tabs; Overview renders it inside customizable widgets) */}
+              {activeView !== 'overview' &&
+                renderSummaryMetricsSection(DEFAULT_METRIC_ORDER, new Set())}
 
               {/* Dynamic Filter Bar (shown on Overview & Ledger) */}
               {(activeView === 'overview' || activeView === 'ledger') && (
@@ -1471,20 +1844,25 @@ export default function App() {
                       <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 mr-1">
                         Filter tags:
                       </span>
-                      {tags.map((tag) => {
+                      {hierarchicalTags.map(({ tag }) => {
                         const active = filters.tagIds.includes(tag.id);
                         return (
                           <button
                             key={tag.id}
                             type="button"
                             onClick={() => toggleFilterTag(tag.id)}
+                            title={
+                              tag.parentCategory
+                                ? `${tag.name} (sub-tag of ${tag.parentCategory})`
+                                : tag.name
+                            }
                             className={`px-2.5 py-1 rounded-md text-[11px] font-medium border transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                               active
                                 ? 'bg-slate-900 dark:bg-teal-600 text-white border-slate-900 dark:border-teal-600'
                                 : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
                             }`}
                           >
-                            {tag.name}
+                            {tag.parentCategory ? `${tag.parentCategory} › ${tag.name}` : tag.name}
                           </button>
                         );
                       })}
@@ -1505,97 +1883,306 @@ export default function App() {
 
               {activeView === 'overview' && (
                 <>
+                  {/* Overview Layout Customization Bar */}
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
+                      <span>
+                        Showing{' '}
+                        <strong className="font-semibold text-slate-700 dark:text-slate-200">
+                          {overviewLayout.visibleWidgetCount} of {overviewLayout.totalWidgetCount}
+                        </strong>{' '}
+                        overview widgets
+                      </span>
+                      {overviewLayout.isCustomized && (
+                        <button
+                          type="button"
+                          onClick={overviewLayout.resetLayout}
+                          className="inline-flex items-center gap-1 text-xs font-medium text-teal-700 dark:text-teal-400 hover:underline cursor-pointer"
+                        >
+                          <RotateCcw className="w-3 h-3" />
+                          <span>Reset layout</span>
+                        </button>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setCustomizeOverviewOpen(true)}
+                      className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
+                    >
+                      <SlidersHorizontal className="w-3.5 h-3.5 text-teal-700 dark:text-teal-400" />
+                      <span>Customize Overview</span>
+                    </button>
+                  </div>
+
                   {(balanceReport.totalUnsettledAmount > 0 || Math.abs(currentUserNetBalance) > 0.009) && (
+                    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-5 py-3.5 space-y-3">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div className="flex flex-wrap items-center gap-2 text-xs sm:text-sm text-slate-700 dark:text-slate-300">
+                          <Zap className="w-4 h-4 text-teal-700 dark:text-teal-400 shrink-0" />
+                          {currentUserNetBalance > 0.009 ? (
+                            <span>
+                              Your split balance:{' '}
+                              <strong className="font-mono-tabular text-emerald-700 dark:text-emerald-400">
+                                You are owed {formatAmount(currentUserNetBalance)}
+                              </strong>
+                            </span>
+                          ) : currentUserNetBalance < -0.009 ? (
+                            <span>
+                              Your split balance:{' '}
+                              <strong className="font-mono-tabular text-red-700 dark:text-red-400">
+                                You owe {formatAmount(Math.abs(currentUserNetBalance))}
+                              </strong>
+                            </span>
+                          ) : (
+                            <span>
+                              Unsettled group balance:{' '}
+                              <strong className="font-mono-tabular text-slate-900 dark:text-slate-100">
+                                {formatAmount(balanceReport.totalUnsettledAmount)}
+                              </strong>
+                            </span>
+                          )}
+                          {balanceReport.transfersSaved > 0 && (
+                            <span className="text-xs text-slate-500 dark:text-slate-400">
+                              · {balanceReport.simplifiedDebts.length} quick{' '}
+                              {balanceReport.simplifiedDebts.length === 1
+                                ? 'transfer'
+                                : 'transfers'}{' '}
+                              (saves {balanceReport.transfersSaved})
+                            </span>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setActiveView('splits')}
+                          className="text-xs font-semibold text-teal-700 dark:text-teal-400 hover:text-teal-800 dark:hover:text-teal-300 cursor-pointer whitespace-nowrap"
+                        >
+                          View All Balances &amp; Splits &rarr;
+                        </button>
+                      </div>
+
+                      {topQuickSettlements.length > 0 && (
+                        <div className="pt-2.5 border-t border-slate-100 dark:border-slate-800 space-y-2">
+                          <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                            Quick Settlement Suggestions
+                          </div>
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
+                            {topQuickSettlements.map((debt) => {
+                              const rowKey = `${debt.fromUid}-${debt.toUid}`;
+                              const isConfirming = overviewConfirmSettleKey === rowKey;
+                              const isSettling = overviewQuickSettlingKey === rowKey;
+                              const fromLabel = debt.fromUid === user.uid ? 'You' : debt.fromName;
+                              const toLabel = debt.toUid === user.uid ? 'You' : debt.toName;
+
+                              return (
+                                <div
+                                  key={rowKey}
+                                  className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40"
+                                >
+                                  <div className="min-w-0">
+                                    <div className="flex items-center gap-1 text-xs font-semibold text-slate-900 dark:text-slate-100 truncate">
+                                      <span className="truncate">{fromLabel}</span>
+                                      <ArrowRight className="w-3 h-3 text-slate-400 dark:text-slate-500 shrink-0" />
+                                      <span className="truncate">{toLabel}</span>
+                                    </div>
+                                    <div className="font-mono-tabular text-xs font-bold text-teal-800 dark:text-teal-400">
+                                      {formatAmount(debt.amount)}
+                                    </div>
+                                  </div>
+
+                                  {!isConfirming ? (
+                                    <button
+                                      type="button"
+                                      disabled={overviewQuickSettlingKey !== null}
+                                      onClick={() => setOverviewConfirmSettleKey(rowKey)}
+                                      className="px-2.5 py-1 rounded-md bg-teal-700 hover:bg-teal-800 text-white text-[11px] font-semibold disabled:opacity-50 cursor-pointer shrink-0 whitespace-nowrap"
+                                    >
+                                      Quick Settle
+                                    </button>
+                                  ) : (
+                                    <div className="flex items-center gap-1 shrink-0">
+                                      <button
+                                        type="button"
+                                        disabled={isSettling}
+                                        onClick={async () => {
+                                          setOverviewQuickSettlingKey(rowKey);
+                                          try {
+                                            await createSettlement(activeProject, user, {
+                                              fromUid: debt.fromUid,
+                                              fromName: debt.fromName,
+                                              fromPhoto: debt.fromPhoto,
+                                              toUid: debt.toUid,
+                                              toName: debt.toName,
+                                              toPhoto: debt.toPhoto,
+                                              amount: debt.amount,
+                                              date: getTodayISO(),
+                                              paymentMethod: 'PhonePe',
+                                              note: `Quick settlement (${activeProject.name})`,
+                                            });
+                                            setOverviewConfirmSettleKey(null);
+                                          } catch (err) {
+                                            setGlobalError(
+                                              err instanceof Error
+                                                ? err.message
+                                                : 'Failed to record quick settlement.'
+                                            );
+                                          } finally {
+                                            setOverviewQuickSettlingKey(null);
+                                          }
+                                        }}
+                                        className="px-2 py-1 rounded-md bg-teal-700 hover:bg-teal-800 text-white text-[11px] font-semibold inline-flex items-center gap-1 disabled:opacity-60 cursor-pointer whitespace-nowrap"
+                                      >
+                                        {isSettling ? (
+                                          <Loader2 className="w-3 h-3 animate-spin" />
+                                        ) : (
+                                          <Check className="w-3 h-3" />
+                                        )}
+                                        <span>{isSettling ? 'Saving' : 'Confirm'}</span>
+                                      </button>
+                                      <button
+                                        type="button"
+                                        disabled={isSettling}
+                                        onClick={() => setOverviewConfirmSettleKey(null)}
+                                        aria-label="Cancel quick settle"
+                                        className="p-1 rounded-md border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 cursor-pointer"
+                                      >
+                                        <X className="w-3 h-3" />
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                          {balanceReport.simplifiedDebts.length > 3 && (
+                            <button
+                              type="button"
+                              onClick={() => setActiveView('splits')}
+                              className="text-[11px] font-medium text-teal-700 dark:text-teal-400 hover:underline cursor-pointer"
+                            >
+                              +{balanceReport.simplifiedDebts.length - 3} more suggested transfers
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {(lendingSummary.activeLoanCount > 0 || lendingSummary.totalReceivedAllTime > 0) && (
                     <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-5 py-3.5 flex flex-wrap items-center justify-between gap-3">
                       <div className="text-xs sm:text-sm text-slate-700 dark:text-slate-300">
-                        {currentUserNetBalance > 0.009 ? (
+                        {lendingSummary.activeLoanCount > 0 ? (
                           <span>
-                            Your split balance:{' '}
-                            <strong className="font-mono-tabular text-emerald-700 dark:text-emerald-400">
-                              You are owed {formatAmount(currentUserNetBalance)}
-                            </strong>
-                          </span>
-                        ) : currentUserNetBalance < -0.009 ? (
-                          <span>
-                            Your split balance:{' '}
-                            <strong className="font-mono-tabular text-red-700 dark:text-red-400">
-                              You owe {formatAmount(Math.abs(currentUserNetBalance))}
-                            </strong>
+                            External lending pending:{' '}
+                            <strong className="font-mono-tabular text-teal-700 dark:text-teal-400">
+                              {formatAmount(lendingSummary.totalReceivableOutstanding)}
+                            </strong>{' '}
+                            across {lendingSummary.activeLoanCount}{' '}
+                            {lendingSummary.activeLoanCount === 1 ? 'split' : 'splits'} (
+                            {lendingSummary.totalPendingPeople}{' '}
+                            {lendingSummary.totalPendingPeople === 1 ? 'person' : 'people'} left)
                           </span>
                         ) : (
                           <span>
-                            Unsettled group balance:{' '}
-                            <strong className="font-mono-tabular text-slate-900 dark:text-slate-100">
-                              {formatAmount(balanceReport.totalUnsettledAmount)}
-                            </strong>
+                            Money received:{' '}
+                            <strong className="font-mono-tabular text-emerald-700 dark:text-emerald-400">
+                              {formatAmount(lendingSummary.totalReceivedAllTime)}
+                            </strong>{' '}
+                            balancing project expenditure
                           </span>
                         )}
                       </div>
                       <button
                         type="button"
-                        onClick={() => setActiveView('splits')}
+                        onClick={() => setActiveView('lending')}
                         className="text-xs font-semibold text-teal-700 dark:text-teal-400 hover:text-teal-800 dark:hover:text-teal-300 cursor-pointer"
                       >
-                        View Balances &amp; Settle Up &rarr;
+                        Manage Lending &amp; Received &rarr;
                       </button>
                     </div>
                   )}
-                  <MonthlyBudgetCard
-                    project={activeProject}
-                    thisMonthSpend={metrics.thisMonthSpend}
-                    onUpdateBudget={async (budget) => {
-                      await updateProjectBudget(activeProject.id, budget);
-                    }}
-                  />
-                  <SpendingInsightsCard
-                    expenses={expenses}
-                    tags={tags}
-                    activeTagFilters={filters.tagIds}
-                    onFilterByTag={toggleFilterTag}
-                    onInspectExpense={(exp) => {
-                      setEditingExpense(exp);
-                      setExpenseModalOpen(true);
-                    }}
-                    onAddExpense={() => {
-                      setEditingExpense(null);
-                      setExpenseModalOpen(true);
-                    }}
-                  />
-                  <AnalyticsCharts
-                    expenses={filteredExpenses}
-                    tags={tags}
-                    timeframe={timeframe}
-                    onTimeframeChange={setTimeframe}
-                    isDark={isDark}
-                  />
-                  <ExpenseTable
-                    expenses={filteredExpenses}
-                    tags={tags}
-                    members={members}
-                    loading={expensesLoading}
-                    hasActiveFilters={hasActiveFilters}
-                    onClearFilters={() => setFilters(EMPTY_FILTERS)}
-                    onEdit={(exp) => {
-                      setEditingExpense(exp);
-                      setExpenseModalOpen(true);
-                    }}
-                    onDelete={(exp) => setConfirmDeleteExpense(exp)}
-                    onAddFirst={() => {
-                      setEditingExpense(null);
-                      setExpenseModalOpen(true);
-                    }}
-                  />
+
+                  {(() => {
+                    const visibleWidgets = overviewLayout.layout.widgetOrder.filter(
+                      (id) => !overviewLayout.hiddenWidgetSet.has(id)
+                    );
+                    if (visibleWidgets.length === 0) {
+                      return (
+                        <div className="bg-white dark:bg-slate-900 border border-dashed border-slate-300 dark:border-slate-700 rounded-xl p-10 text-center space-y-3">
+                          <p className="font-display text-base font-bold text-slate-900 dark:text-slate-100">
+                            All Overview widgets are hidden
+                          </p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
+                            Turn widgets back on or restore the default Overview layout to see your metrics, charts, and ledger.
+                          </p>
+                          <div className="flex flex-wrap items-center justify-center gap-2.5 pt-1">
+                            <button
+                              type="button"
+                              onClick={() => setCustomizeOverviewOpen(true)}
+                              className="px-3.5 py-2 text-xs font-semibold rounded-lg bg-teal-700 text-white hover:bg-teal-800 inline-flex items-center gap-1.5 cursor-pointer"
+                            >
+                              <SlidersHorizontal className="w-3.5 h-3.5" />
+                              <span>Customize Overview</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={overviewLayout.resetLayout}
+                              className="px-3.5 py-2 text-xs font-medium rounded-lg border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 inline-flex items-center gap-1.5 cursor-pointer"
+                            >
+                              <RotateCcw className="w-3.5 h-3.5" />
+                              <span>Restore Default Layout</span>
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    const renderedNodes: ReactNode[] = [];
+                    for (let idx = 0; idx < visibleWidgets.length; idx += 1) {
+                      const widgetId = visibleWidgets[idx];
+                      const nextWidgetId = visibleWidgets[idx + 1];
+                      if (
+                        (widgetId === 'tagChart' && nextWidgetId === 'subTagChart') ||
+                        (widgetId === 'subTagChart' && nextWidgetId === 'tagChart')
+                      ) {
+                        renderedNodes.push(
+                          <div
+                            key={`${widgetId}-${nextWidgetId}`}
+                            className="grid grid-cols-1 lg:grid-cols-2 gap-6"
+                          >
+                            {renderOverviewWidget(widgetId)}
+                            {renderOverviewWidget(nextWidgetId)}
+                          </div>
+                        );
+                        idx += 1;
+                      } else {
+                        renderedNodes.push(renderOverviewWidget(widgetId));
+                      }
+                    }
+                    return renderedNodes;
+                  })()}
                 </>
               )}
 
               {activeView === 'ledger' && (
                 <div className="space-y-4">
-                  <div className="flex items-center justify-end">
+                  <div className="flex flex-wrap items-center justify-end gap-2.5">
+                    <button
+                      type="button"
+                      disabled={expenses.length === 0 || exportingFullPdf}
+                      onClick={handleDownloadFullLedgerPdf}
+                      className="px-3.5 py-2 rounded-lg border border-teal-200 dark:border-teal-800 bg-teal-50 dark:bg-teal-950/60 text-xs font-semibold text-teal-800 dark:text-teal-300 hover:bg-teal-100 dark:hover:bg-teal-900/60 inline-flex items-center gap-1.5 disabled:opacity-50 cursor-pointer whitespace-nowrap shrink-0 transition-colors"
+                    >
+                      {exportingFullPdf ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <FileDown className="w-3.5 h-3.5" />
+                      )}
+                      <span>{exportingFullPdf ? 'Generating PDF...' : 'Export Full Ledger'}</span>
+                    </button>
                     <button
                       type="button"
                       disabled={filteredExpenses.length === 0}
                       onClick={handleExportCsv}
-                      className="px-3.5 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 inline-flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                      className="px-3.5 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 inline-flex items-center gap-1.5 disabled:opacity-50 cursor-pointer whitespace-nowrap shrink-0"
                     >
                       <Download className="w-3.5 h-3.5" />
                       <span>Export CSV</span>
@@ -1605,16 +2192,23 @@ export default function App() {
                     expenses={filteredExpenses}
                     tags={tags}
                     members={members}
+                    receivedByExpenseId={lendingSummary.receivedByExpenseId}
                     loading={expensesLoading}
                     hasActiveFilters={hasActiveFilters}
                     onClearFilters={() => setFilters(EMPTY_FILTERS)}
                     onEdit={(exp) => {
                       setEditingExpense(exp);
+                      setExpenseInitialSplitMode(undefined);
                       setExpenseModalOpen(true);
                     }}
                     onDelete={(exp) => setConfirmDeleteExpense(exp)}
+                    onRecordReceived={(exp) => {
+                      setReceivedTargetExpense(exp);
+                      setReceivedModalOpen(true);
+                    }}
                     onAddFirst={() => {
                       setEditingExpense(null);
+                      setExpenseInitialSplitMode(undefined);
                       setExpenseModalOpen(true);
                     }}
                   />
@@ -1636,7 +2230,37 @@ export default function App() {
                   }}
                   onAddSplitExpense={() => {
                     setEditingExpense(null);
+                    setExpenseInitialSplitMode(undefined);
                     setExpenseModalOpen(true);
+                  }}
+                />
+              )}
+
+              {activeView === 'lending' && (
+                <LendingAndCreditsView
+                  projectName={activeProject.name}
+                  expenses={expenses}
+                  receivedMoney={receivedMoney}
+                  onNewLendingExpense={() => {
+                    setEditingExpense(null);
+                    setExpenseInitialSplitMode('external');
+                    setExpenseModalOpen(true);
+                  }}
+                  onEditExpense={(exp) => {
+                    setEditingExpense(exp);
+                    setExpenseInitialSplitMode(undefined);
+                    setExpenseModalOpen(true);
+                  }}
+                  onRecordPaymentForExpense={(exp) => {
+                    setReceivedTargetExpense(exp);
+                    setReceivedModalOpen(true);
+                  }}
+                  onAddGeneralReceived={() => {
+                    setReceivedTargetExpense(null);
+                    setReceivedModalOpen(true);
+                  }}
+                  onDeleteReceivedMoney={async (receivedId) => {
+                    await deleteReceivedMoney(activeProject.id, receivedId);
                   }}
                 />
               )}
@@ -1645,32 +2269,40 @@ export default function App() {
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                   {/* Tags Management */}
                   <div className="lg:col-span-7 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 space-y-5">
-                    <div className="flex items-center justify-between gap-4">
+                    <div className="flex flex-wrap items-center justify-between gap-4">
                       <div>
                         <h2 className="font-display text-base font-bold text-slate-900 dark:text-slate-100">
                           Project Tags
                         </h2>
                         <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                          Seeded system categories and custom tags for {activeProject.name}
+                          Create top-level parent tags or add child sub-tags under any existing tag
                         </p>
                       </div>
                       <button
                         type="button"
-                        onClick={() => setTagModalOpen(true)}
+                        onClick={() => {
+                          setEditingTag(null);
+                          setDefaultTagParent('');
+                          setTagModalOpen(true);
+                        }}
                         className="px-3.5 py-2 rounded-lg bg-teal-700 hover:bg-teal-800 dark:bg-teal-600 dark:hover:bg-teal-500 text-white text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
                       >
                         <Plus className="w-3.5 h-3.5" />
-                        <span>Create Custom Tag</span>
+                        <span>Create Tag</span>
                       </button>
                     </div>
 
                     <div className="divide-y divide-slate-100 dark:divide-slate-800">
-                      {tags.map((tag) => (
+                      {hierarchicalTags.map(({ tag, depth, childCount }) => (
                         <div
                           key={tag.id}
+                          style={depth > 0 ? { paddingLeft: `${Math.min(depth, 3) * 20}px` } : undefined}
                           className="py-2.5 flex items-center justify-between gap-3 text-sm"
                         >
-                          <div className="flex items-center gap-3 min-w-0">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            {depth > 0 && (
+                              <CornerDownRight className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                            )}
                             <span
                               className="w-3.5 h-3.5 rounded-xs shrink-0"
                               style={{ backgroundColor: tag.color }}
@@ -1678,16 +2310,46 @@ export default function App() {
                             <span className="font-medium text-slate-900 dark:text-slate-100 truncate">
                               {tag.name}
                             </span>
-                            {tag.parentCategory && (
-                              <span className="text-xs text-slate-500 dark:text-slate-400">
+                            {childCount > 0 && (
+                              <span className="text-[11px] text-slate-500 dark:text-slate-400 shrink-0 font-mono-tabular">
+                                · {childCount} {childCount === 1 ? 'sub-tag' : 'sub-tags'}
+                              </span>
+                            )}
+                            {depth === 0 && tag.parentCategory && (
+                              <span className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
                                 · Sub-tag of {tag.parentCategory}
                               </span>
                             )}
                           </div>
-                          <div className="flex items-center gap-3 shrink-0">
-                            <span className="text-xs text-slate-400 dark:text-slate-500">
+                          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                            <span className="hidden sm:inline text-[11px] text-slate-400 dark:text-slate-500 mr-1">
                               {tag.isSystem ? 'System' : 'Custom'}
                             </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingTag(null);
+                                setDefaultTagParent(tag.name);
+                                setTagModalOpen(true);
+                              }}
+                              aria-label={`Add child sub-tag under ${tag.name}`}
+                              className="px-2 py-1 rounded-md border border-slate-200 dark:border-slate-700 text-[11px] font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 inline-flex items-center gap-1 cursor-pointer whitespace-nowrap shrink-0"
+                            >
+                              <Plus className="w-3 h-3" />
+                              <span>Child</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingTag(tag);
+                                setDefaultTagParent('');
+                                setTagModalOpen(true);
+                              }}
+                              aria-label={`Edit tag ${tag.name}`}
+                              className="p-1.5 rounded text-slate-400 dark:text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
                             {!tag.isSystem && (
                               <button
                                 type="button"
@@ -1782,18 +2444,24 @@ export default function App() {
           className="fixed bottom-5 right-5 z-30 h-12 px-4 rounded-full bg-slate-900 dark:bg-slate-800 hover:bg-slate-800 dark:hover:bg-slate-700 border border-transparent dark:border-slate-700 text-white shadow-lg flex items-center gap-2 text-xs font-semibold transition-transform hover:scale-[1.02] cursor-pointer"
         >
           <MessageSquareText className="w-4 h-4 text-teal-400" />
-          <span>Ask AI to Log Expense</span>
+          <span>Ask AI &middot; Log &amp; Chat</span>
         </button>
       )}
 
       {/* AI Expense Assistant Drawer */}
       {activeProject && (
         <AiExpenseDrawer
+          key={activeProject.id}
           open={aiDrawerOpen}
           onClose={() => setAiDrawerOpen(false)}
+          projectId={activeProject.id}
           projectName={activeProject.name}
+          monthlyBudget={activeProject.monthlyBudget}
+          existingExpenses={expenses}
           tags={tags}
           members={members}
+          settlements={settlements}
+          receivedMoney={receivedMoney}
           onConfirmSave={handleAiConfirmSave}
           onConfirmSaveBatch={handleAiConfirmSaveBatch}
         />
@@ -1806,13 +2474,33 @@ export default function App() {
           onClose={() => {
             setExpenseModalOpen(false);
             setEditingExpense(null);
+            setExpenseInitialSplitMode(undefined);
           }}
           editingExpense={editingExpense}
+          initialSplitMode={expenseInitialSplitMode}
           project={activeProject}
+          existingExpenses={expenses}
           members={members}
           tags={tags}
           currentUserUid={user.uid}
           onSubmit={handleSaveExpense}
+        />
+      )}
+
+      {activeProject && (
+        <ReceivedMoneyModal
+          open={receivedModalOpen}
+          onClose={() => {
+            setReceivedModalOpen(false);
+            setReceivedTargetExpense(null);
+          }}
+          projectName={activeProject.name}
+          expenses={expenses}
+          receivedMoney={receivedMoney}
+          initialExpense={receivedTargetExpense}
+          onSubmit={async (input) => {
+            await createReceivedMoney(activeProject, user, input);
+          }}
         />
       )}
 
@@ -1854,9 +2542,42 @@ export default function App() {
       {activeProject && (
         <TagModal
           open={tagModalOpen}
-          onClose={() => setTagModalOpen(false)}
+          onClose={() => {
+            setTagModalOpen(false);
+            setEditingTag(null);
+            setDefaultTagParent('');
+          }}
+          tags={tags}
+          defaultParentCategory={defaultTagParent}
+          editingTag={editingTag}
           onSubmit={async (name, color, parentCategory) => {
-            await createCustomTag(activeProject, user, name, color, parentCategory);
+            if (editingTag) {
+              const previousName = editingTag.name;
+              await updateTag(activeProject.id, editingTag.id, {
+                name,
+                color,
+                parentCategory,
+              });
+              // Keep child tags linked if a parent tag was renamed
+              if (previousName.trim() !== name.trim()) {
+                const affectedChildren = tags.filter(
+                  (t) =>
+                    t.id !== editingTag.id &&
+                    t.parentCategory.trim().toLowerCase() === previousName.trim().toLowerCase()
+                );
+                await Promise.all(
+                  affectedChildren.map((child) =>
+                    updateTag(activeProject.id, child.id, {
+                      name: child.name,
+                      color: child.color,
+                      parentCategory: name.trim(),
+                    })
+                  )
+                );
+              }
+            } else {
+              await createCustomTag(activeProject, user, name, color, parentCategory);
+            }
           }}
         />
       )}
@@ -1947,6 +2668,22 @@ export default function App() {
           </div>
         </div>
       )}
+      <OverviewCustomizeModal
+        open={customizeOverviewOpen}
+        onClose={() => setCustomizeOverviewOpen(false)}
+        layout={overviewLayout.layout}
+        hiddenWidgetSet={overviewLayout.hiddenWidgetSet}
+        hiddenMetricSet={overviewLayout.hiddenMetricSet}
+        isCustomized={overviewLayout.isCustomized}
+        onToggleWidget={overviewLayout.toggleWidget}
+        onMoveWidget={overviewLayout.moveWidget}
+        onStepWidget={overviewLayout.stepWidget}
+        onToggleMetric={overviewLayout.toggleMetric}
+        onMoveMetric={overviewLayout.moveMetric}
+        onStepMetric={overviewLayout.stepMetric}
+        onShowAll={overviewLayout.showAll}
+        onResetLayout={overviewLayout.resetLayout}
+      />
       <BudgetToastContainer
         toasts={budgetToasts}
         onDismiss={dismissBudgetToast}

@@ -26,6 +26,7 @@ import type {
   PaymentMethod,
   Project,
   ProjectMember,
+  ReceivedMoney,
   RecurringFrequency,
   Settlement,
   SplitMode,
@@ -429,6 +430,37 @@ export function subscribeProjectSettlements(
   );
 }
 
+export function subscribeProjectReceivedMoney(
+  projectId: string,
+  uid: string,
+  onData: (items: ReceivedMoney[]) => void,
+  onError: (err: Error) => void
+): Unsubscribe {
+  const path = `projects/${projectId}/receivedMoney`;
+  const q = query(
+    collection(db, 'projects', projectId, 'receivedMoney'),
+    where('projectMemberUids', 'array-contains', uid),
+    orderBy('date', 'desc')
+  );
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const list: ReceivedMoney[] = snapshot.docs.map((d) => ({
+        id: d.id,
+        ...(d.data() as Omit<ReceivedMoney, 'id'>),
+      }));
+      onData(list);
+    },
+    (error) => {
+      try {
+        handleFirestoreError(error, OperationType.LIST, path);
+      } catch (wrapped) {
+        onError(wrapped as Error);
+      }
+    }
+  );
+}
+
 export function subscribePendingInvites(
   email: string,
   onData: (invites: Invite[]) => void,
@@ -537,7 +569,7 @@ export async function inviteMemberToProject(
         joinedAt: serverTimestamp(),
       });
 
-      const [membersSnap, tagsSnap, expensesSnap, settlementsSnap] = await Promise.all([
+      const [membersSnap, tagsSnap, expensesSnap, settlementsSnap, receivedSnap] = await Promise.all([
         getDocs(
           query(
             collection(db, 'projects', project.id, 'members'),
@@ -562,6 +594,12 @@ export async function inviteMemberToProject(
             where('projectMemberUids', 'array-contains', inviter.uid)
           )
         ),
+        getDocs(
+          query(
+            collection(db, 'projects', project.id, 'receivedMoney'),
+            where('projectMemberUids', 'array-contains', inviter.uid)
+          )
+        ),
       ]);
 
       membersSnap.docs.forEach((d) => {
@@ -574,6 +612,9 @@ export async function inviteMemberToProject(
         batch.update(d.ref, { projectMemberUids: updatedMemberUids, updatedAt: serverTimestamp() });
       });
       settlementsSnap.docs.forEach((d) => {
+        batch.update(d.ref, { projectMemberUids: updatedMemberUids, updatedAt: serverTimestamp() });
+      });
+      receivedSnap.docs.forEach((d) => {
         batch.update(d.ref, { projectMemberUids: updatedMemberUids, updatedAt: serverTimestamp() });
       });
 
@@ -659,7 +700,8 @@ export async function syncProjectMemberUidsIfNeeded(
   members: ProjectMember[],
   tags: Tag[],
   expenses: Expense[],
-  settlements: Settlement[] = []
+  settlements: Settlement[] = [],
+  receivedMoney: ReceivedMoney[] = []
 ): Promise<void> {
   const expected = [...project.memberUids].sort();
   const matches = (arr: string[]) => {
@@ -672,12 +714,14 @@ export async function syncProjectMemberUidsIfNeeded(
   const staleTags = tags.filter((t) => !matches(t.projectMemberUids || []));
   const staleExpenses = expenses.filter((e) => !matches(e.projectMemberUids || []));
   const staleSettlements = settlements.filter((s) => !matches(s.projectMemberUids || []));
+  const staleReceived = receivedMoney.filter((r) => !matches(r.projectMemberUids || []));
 
   if (
     staleMembers.length === 0 &&
     staleTags.length === 0 &&
     staleExpenses.length === 0 &&
-    staleSettlements.length === 0
+    staleSettlements.length === 0 &&
+    staleReceived.length === 0
   ) {
     return;
   }
@@ -711,6 +755,14 @@ export async function syncProjectMemberUidsIfNeeded(
     for (const s of staleSettlements) {
       if (count >= 400) break;
       batch.update(doc(db, 'projects', project.id, 'settlements', s.id), {
+        projectMemberUids: project.memberUids,
+        updatedAt: serverTimestamp(),
+      });
+      count++;
+    }
+    for (const r of staleReceived) {
+      if (count >= 400) break;
+      batch.update(doc(db, 'projects', project.id, 'receivedMoney', r.id), {
         projectMemberUids: project.memberUids,
         updatedAt: serverTimestamp(),
       });
@@ -752,6 +804,24 @@ export async function createCustomTag(
   }
 }
 
+export async function updateTag(
+  projectId: string,
+  tagId: string,
+  updates: { name: string; color: string; parentCategory: string }
+): Promise<void> {
+  const path = `projects/${projectId}/tags/${tagId}`;
+  try {
+    await updateDoc(doc(db, 'projects', projectId, 'tags', tagId), {
+      name: updates.name.trim().slice(0, 40),
+      color: updates.color,
+      parentCategory: updates.parentCategory.trim().slice(0, 40),
+      updatedAt: serverTimestamp(),
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, path);
+  }
+}
+
 export async function deleteCustomTag(projectId: string, tagId: string): Promise<void> {
   const path = `projects/${projectId}/tags/${tagId}`;
   try {
@@ -777,6 +847,9 @@ export interface ExpenseInput {
   splitMode?: SplitMode;
   splitShares?: Record<string, number>;
   splitPercentages?: Record<string, number>;
+  externalTotalPeople?: number;
+  externalIncludeSelf?: boolean;
+  externalLabel?: string;
 }
 
 function cleanNumericMap(map: Record<string, number> | undefined): Record<string, number> | undefined {
@@ -805,9 +878,26 @@ export async function createExpense(
       : undefined;
 
   const splitMode: SplitMode = input.splitMode ?? 'none';
-  const cleanedShares = splitMode !== 'none' ? cleanNumericMap(input.splitShares) : undefined;
+  const isExternalSplit = splitMode === 'external';
+  const cleanedShares =
+    splitMode !== 'none' && !isExternalSplit ? cleanNumericMap(input.splitShares) : undefined;
   const cleanedPercentages =
     splitMode === 'percentage' ? cleanNumericMap(input.splitPercentages) : undefined;
+  const externalTotalPeople = isExternalSplit
+    ? Math.max(1, Math.min(50, Math.round(input.externalTotalPeople ?? 2)))
+    : undefined;
+  const externalIncludeSelf = isExternalSplit
+    ? externalTotalPeople === 1
+      ? false
+      : Boolean(input.externalIncludeSelf ?? true)
+    : undefined;
+  const externalLabel = isExternalSplit ? input.externalLabel?.trim().slice(0, 100) : undefined;
+
+  const effectiveSplitMode: SplitMode = isExternalSplit
+    ? 'external'
+    : cleanedShares
+      ? splitMode
+      : 'none';
 
   const payload: Record<string, unknown> = {
     amount: Math.round(input.amount * 100) / 100,
@@ -822,7 +912,7 @@ export async function createExpense(
     projectMemberUids: project.memberUids,
     source: input.source,
     isRecurring,
-    splitMode: cleanedShares ? splitMode : 'none',
+    splitMode: effectiveSplitMode,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   };
@@ -836,6 +926,13 @@ export async function createExpense(
   }
   if (cleanedPercentages) {
     payload.splitPercentages = cleanedPercentages;
+  }
+  if (isExternalSplit && externalTotalPeople !== undefined) {
+    payload.externalTotalPeople = externalTotalPeople;
+    payload.externalIncludeSelf = externalIncludeSelf;
+    if (externalLabel) {
+      payload.externalLabel = externalLabel;
+    }
   }
 
   try {
@@ -860,9 +957,26 @@ export async function updateExpense(
       : undefined;
 
   const splitMode: SplitMode = input.splitMode ?? 'none';
-  const cleanedShares = splitMode !== 'none' ? cleanNumericMap(input.splitShares) : undefined;
+  const isExternalSplit = splitMode === 'external';
+  const cleanedShares =
+    splitMode !== 'none' && !isExternalSplit ? cleanNumericMap(input.splitShares) : undefined;
   const cleanedPercentages =
     splitMode === 'percentage' ? cleanNumericMap(input.splitPercentages) : undefined;
+  const externalTotalPeople = isExternalSplit
+    ? Math.max(1, Math.min(50, Math.round(input.externalTotalPeople ?? 2)))
+    : undefined;
+  const externalIncludeSelf = isExternalSplit
+    ? externalTotalPeople === 1
+      ? false
+      : Boolean(input.externalIncludeSelf ?? true)
+    : undefined;
+  const externalLabel = isExternalSplit ? input.externalLabel?.trim().slice(0, 100) : undefined;
+
+  const effectiveSplitMode: SplitMode = isExternalSplit
+    ? 'external'
+    : cleanedShares
+      ? splitMode
+      : 'none';
 
   const payload: Record<string, unknown> = {
     amount: Math.round(input.amount * 100) / 100,
@@ -877,9 +991,12 @@ export async function updateExpense(
     isRecurring,
     frequency: isRecurring && frequency ? frequency : deleteField(),
     nextDueDate: isRecurring && nextDueDate ? nextDueDate : deleteField(),
-    splitMode: cleanedShares ? splitMode : 'none',
+    splitMode: effectiveSplitMode,
     splitShares: cleanedShares ?? deleteField(),
     splitPercentages: cleanedPercentages ?? deleteField(),
+    externalTotalPeople: isExternalSplit && externalTotalPeople ? externalTotalPeople : deleteField(),
+    externalIncludeSelf: isExternalSplit ? externalIncludeSelf : deleteField(),
+    externalLabel: isExternalSplit && externalLabel ? externalLabel : deleteField(),
     updatedAt: serverTimestamp(),
   };
 
@@ -922,7 +1039,13 @@ export async function logRecurringBillPayment(
     updatedAt: serverTimestamp(),
   };
 
-  if (expense.splitMode && expense.splitMode !== 'none' && expense.splitShares) {
+  if (expense.splitMode === 'external' && (expense.externalTotalPeople ?? 0) >= 1) {
+    newPayload.externalTotalPeople = expense.externalTotalPeople;
+    newPayload.externalIncludeSelf = expense.externalIncludeSelf ?? true;
+    if (expense.externalLabel) {
+      newPayload.externalLabel = expense.externalLabel;
+    }
+  } else if (expense.splitMode && expense.splitMode !== 'none' && expense.splitShares) {
     newPayload.splitShares = expense.splitShares;
   }
   if (expense.splitMode === 'percentage' && expense.splitPercentages) {
@@ -1028,6 +1151,68 @@ export async function deleteSettlement(projectId: string, settlementId: string):
   const path = `projects/${projectId}/settlements/${settlementId}`;
   try {
     await deleteDoc(doc(db, 'projects', projectId, 'settlements', settlementId));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, path);
+  }
+}
+
+export interface ReceivedMoneyInput {
+  amount: number;
+  date: string;
+  source: string;
+  note?: string;
+  paymentMethod: PaymentMethod;
+  linkedExpenseId?: string;
+  peoplePaidCount?: number;
+}
+
+export async function createReceivedMoney(
+  project: Project,
+  user: User,
+  input: ReceivedMoneyInput
+): Promise<string> {
+  const ref = doc(collection(db, 'projects', project.id, 'receivedMoney'));
+  const path = `projects/${project.id}/receivedMoney/${ref.id}`;
+  const trimmedNote = input.note?.trim().slice(0, 200);
+  const trimmedSource = input.source.trim().slice(0, 80) || 'Money Received';
+
+  const payload: Record<string, unknown> = {
+    amount: Math.round(input.amount * 100) / 100,
+    date: input.date,
+    source: trimmedSource,
+    paymentMethod: input.paymentMethod,
+    createdByUid: user.uid,
+    projectMemberUids: project.memberUids,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  };
+
+  if (trimmedNote) {
+    payload.note = trimmedNote;
+  }
+  if (input.linkedExpenseId && /^[a-zA-Z0-9_-]+$/.test(input.linkedExpenseId)) {
+    payload.linkedExpenseId = input.linkedExpenseId.slice(0, 128);
+  }
+  if (
+    typeof input.peoplePaidCount === 'number' &&
+    Number.isFinite(input.peoplePaidCount) &&
+    input.peoplePaidCount >= 0
+  ) {
+    payload.peoplePaidCount = Math.min(50, Math.round(input.peoplePaidCount));
+  }
+
+  try {
+    await setDoc(ref, payload);
+    return ref.id;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, path);
+  }
+}
+
+export async function deleteReceivedMoney(projectId: string, receivedId: string): Promise<void> {
+  const path = `projects/${projectId}/receivedMoney/${receivedId}`;
+  try {
+    await deleteDoc(doc(db, 'projects', projectId, 'receivedMoney', receivedId));
   } catch (error) {
     handleFirestoreError(error, OperationType.DELETE, path);
   }

@@ -6,12 +6,14 @@ import type { Project } from '../types';
 interface MonthlyBudgetCardProps {
   project: Project;
   thisMonthSpend: number;
+  thisMonthReceived?: number;
   onUpdateBudget: (budget: number | null) => Promise<void>;
 }
 
 export function MonthlyBudgetCard({
   project,
   thisMonthSpend,
+  thisMonthReceived = 0,
   onUpdateBudget,
 }: MonthlyBudgetCardProps) {
   const [editing, setEditing] = useState(false);
@@ -28,6 +30,7 @@ export function MonthlyBudgetCard({
 
   const budget = project.monthlyBudget;
   const hasBudget = typeof budget === 'number' && budget > 0;
+  const netMonthSpend = Math.max(0, Math.round((thisMonthSpend - thisMonthReceived) * 100) / 100);
   const monthLabel = new Date().toLocaleDateString('en-IN', {
     month: 'long',
     year: 'numeric',
@@ -177,7 +180,23 @@ export function MonthlyBudgetCard({
               Monthly Budget Limit
             </h2>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Spent <span className="font-mono-tabular font-semibold text-slate-700 dark:text-slate-200">{formatAmount(thisMonthSpend)}</span> in {monthLabel} · No spending cap configured yet
+              {thisMonthReceived > 0 ? (
+                <>
+                  Net spend{' '}
+                  <span className="font-mono-tabular font-semibold text-slate-700 dark:text-slate-200">
+                    {formatAmount(netMonthSpend)}
+                  </span>{' '}
+                  ({formatAmount(thisMonthSpend)} spent − {formatAmount(thisMonthReceived)} received) in {monthLabel} · No spending cap configured yet
+                </>
+              ) : (
+                <>
+                  Spent{' '}
+                  <span className="font-mono-tabular font-semibold text-slate-700 dark:text-slate-200">
+                    {formatAmount(thisMonthSpend)}
+                  </span>{' '}
+                  in {monthLabel} · No spending cap configured yet
+                </>
+              )}
             </p>
           </div>
         </div>
@@ -193,10 +212,10 @@ export function MonthlyBudgetCard({
     );
   }
 
-  const ratio = thisMonthSpend / budget;
+  const ratio = netMonthSpend / budget;
   const percent = Math.round(ratio * 1000) / 10;
   const clampedWidth = Math.min(100, Math.max(0, ratio * 100));
-  const remaining = budget - thisMonthSpend;
+  const remaining = budget - netMonthSpend;
 
   const isExceeded = ratio >= 1;
   const isCritical = !isExceeded && ratio >= 0.95;
@@ -309,12 +328,19 @@ export function MonthlyBudgetCard({
         <div className="flex items-center gap-3 shrink-0">
           <div className="text-right font-mono-tabular">
             <div className="text-sm font-bold text-slate-900 dark:text-slate-100">
-              {formatAmount(thisMonthSpend)}{' '}
+              {formatAmount(netMonthSpend)}{' '}
               <span className="text-xs font-normal text-slate-500 dark:text-slate-400">
                 / {formatAmount(budget)}
               </span>
             </div>
-            <div className={`text-xs font-semibold ${statusTextColor}`}>{percent}% used</div>
+            <div className={`text-xs font-semibold ${statusTextColor}`}>
+              {percent}% used
+              {thisMonthReceived > 0 && (
+                <span className="font-normal text-slate-500 dark:text-slate-400 ml-1">
+                  (-{formatAmount(thisMonthReceived)} received)
+                </span>
+              )}
+            </div>
           </div>
 
           <button

@@ -95,9 +95,12 @@
         "isRecurring": { "type": "boolean" },
         "frequency": { "type": "string", "enum": ["daily", "weekly", "monthly", "yearly"] },
         "nextDueDate": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
-        "splitMode": { "type": "string", "enum": ["none", "equal", "exact", "percentage"] },
+        "splitMode": { "type": "string", "enum": ["none", "equal", "exact", "percentage", "external"] },
         "splitShares": { "type": "object", "description": "Map of member UID to INR share amount." },
         "splitPercentages": { "type": "object", "description": "Map of member UID to percentage share (0-100)." },
+        "externalTotalPeople": { "type": "number", "description": "Number of people splitting an external/lending expense (1-50)." },
+        "externalIncludeSelf": { "type": "boolean", "description": "Whether the payer is included in the external split count." },
+        "externalLabel": { "type": "string", "maxLength": 100, "description": "Optional borrower or external group label." },
         "createdAt": { "type": "string", "format": "date-time" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
@@ -171,6 +174,37 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["projectId", "projectName", "invitedEmail", "invitedByUid", "invitedByName", "status", "createdAt", "updatedAt"]
+    },
+    "ReceivedMoney": {
+      "title": "ReceivedMoney",
+      "description": "Money received from external borrowers, refunds, reimbursements, or credits that balance out expenses and monthly spend.",
+      "type": "object",
+      "properties": {
+        "amount": { "type": "number" },
+        "date": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+        "source": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "note": { "type": "string", "maxLength": 200 },
+        "paymentMethod": {
+          "type": "string",
+          "enum": ["PhonePe", "Google Pay (GPay)", "BHIM UPI", "Paytm", "Debit Card", "Credit Card", "Cash"]
+        },
+        "linkedExpenseId": { "type": "string", "maxLength": 128 },
+        "peoplePaidCount": { "type": "number" },
+        "createdByUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "projectMemberUids": { "type": "array", "description": "Synced member UIDs for secure list queries." },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "amount",
+        "date",
+        "source",
+        "paymentMethod",
+        "createdByUid",
+        "projectMemberUids",
+        "createdAt",
+        "updatedAt"
+      ]
     }
   },
   "firestore": {
@@ -201,6 +235,10 @@
     "/projects/{projectId}/settlements/{settlementId}": {
       "schema": { "$ref": "#/entities/Settlement" },
       "description": "Recorded settlements between project members."
+    },
+    "/projects/{projectId}/receivedMoney/{receivedId}": {
+      "schema": { "$ref": "#/entities/ReceivedMoney" },
+      "description": "External repayments, refunds, and incoming credits balancing project expenses."
     },
     "/invites/{inviteId}": {
       "schema": { "$ref": "#/entities/Invite" },
